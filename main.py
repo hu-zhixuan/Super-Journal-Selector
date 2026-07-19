@@ -101,7 +101,7 @@ def main():
     # Layer ③: 纯代码统计聚合
     logger.info("--- Layer ③: 进入纯代码多维度统计聚合层 ---")
     aggregator = ProfileAggregator()
-    aggregated_stats = aggregator.aggregate(features)
+    aggregated_stats = aggregator.aggregate(features, user_draft_text=user_draft_text)
 
     # Layer ④: LLM深度画像与修稿策略生成
     logger.info("--- Layer ④: 进入 LLM 战略生成与修稿建议层 ---")

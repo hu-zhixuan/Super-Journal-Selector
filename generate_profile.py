@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 class ProfileGenerator:
     """
-    层④：战略生成层。将层③输出的量化统计特征，与 OpenAlex 期刊基本指标、用户待投稿文本进行提示词工程拼装，
-    利用 LLM 的高级学术推理与写作经验，生成客观严谨、包含 SCI/中科院分区的深度《期刊偏好画像与修稿策略报告》。
+    层④：战略生成层。将层③输出的统计特征、本地对标出来的 Top 3 相似文献、用户待投稿文本，
+    拼装为严格“数据表格+极简证据批注”的循证诊断报告。拒绝散文腔调，每句话都必须拿真实论文举证。
     """
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
@@ -24,9 +24,9 @@ class ProfileGenerator:
         user_draft_text: Optional[str] = None,
     ) -> str:
         """
-        基于统计聚合指标、期刊官方指标与可选的用户草稿文本，生成 Markdown 画像与修稿策略
+        基于量化统计、官方指标及相似文献对比，生成高确定性、表格化的对标报告。
         """
-        logger.info(f"正在为期刊 '{journal_name}' 撰写深度画像与策略报告...")
+        logger.info(f"正在为期刊 '{journal_name}' 撰写循证诊断对比报告...")
 
         stats_json = json.dumps(aggregated_stats, ensure_ascii=False, indent=2)
         metadata_json = json.dumps(journal_metadata, ensure_ascii=False, indent=2)
@@ -34,95 +34,105 @@ class ProfileGenerator:
         user_draft_section = ""
         if user_draft_text and user_draft_text.strip():
             user_draft_section = f"""
-### 【核心重点：用户拟投稿论文摘要/大纲对标诊断】
-用户的论文文本（摘要/大纲/草稿部分）如下：
+### 【核心重点：拟投稿论文草稿】
+用户提交的待诊断论文文本：
 ```text
-{user_draft_text[:3000]}
+{user_draft_text[:2000]}
 ```
-请务必结合前面的期刊选稿偏好统计指标与分区特性，在第三部分对用户的这段文本做出专业、细致、具体的对标优化建议与改写指导。
+
+### 【近年发表的 Top 3 最相似文献特征（由 Layer ③ Cosine Similarity 算法计算得出）】
+请直接使用这 3 篇真实文献的数据与用户的草稿进行深度维度对比：
+{json.dumps(aggregated_stats.get("most_similar_papers", []), ensure_ascii=False, indent=2)}
 """
         else:
             user_draft_section = """
-（注：当前用户未提供具体投稿摘要草稿。在第三部分请从通用对标修稿策略出发，给出该刊典型的标题重构模式、Abstract 规范化结构建议及关键论证补强模板。）
+（注：用户本次未提供具体论文草稿。第二部分对比矩阵请以该期刊“典型录用论文”为虚拟靶向进行通用维度基准表对标。）
 """
 
         prompt = f"""
 你是一名在顶尖学术期刊（如 {journal_name}）担任多年编委及高级审稿人（Associate Editor）的资深学者。
-现在我们通过数据工程提取了该期刊的官方元数据指标：
+下面是数据工程提取的该期刊官方指标：
 ```json
 {metadata_json}
 ```
 
-以及该期刊近年发表论文的量化统计聚合指标：
+以及该期刊近年发表论文的量化统计聚合指标（包含代表性高引文献与最相似文献）：
 ```json
 {stats_json}
 ```
 
 {user_draft_section}
 
-请根据以上数据，为准备向 `{journal_name}` 投稿的科研人员输出一份专业、客观、深度、逻辑严密且指导性极强的 Markdown 画像与策略建议报告。
-报告必须严格包含以下三大核心部分（需用严谨规范的学术话语阐述，兼顾深度与实用性）：
+请根据以上真实数据，为作者撰写一份严谨、冰冷、无 AI 废话的 Markdown 循证对标与修改诊断报告。
 
-## 一、 目标期刊选稿偏好核心画像 (Journal Preference Profile)
+【🔴 极其严厉的输出控制规范】：
+1. **必须每句有据**：不准泛泛而谈。提示词中提供的所有结论，凡是涉及到该期刊的方法偏好、样本要求、理论倾向、狙击盲区的判定，**必须在话术中明确用 `《论文标题》` 引用聚合指标里存在的真实文献作为实证！禁止凭空编造证据！**
+2. **必须看板化呈现**：拒绝长篇大论的“AI 抒情散文”。必须采用 **“数据表格 + 极简 bullet 点批注”** 的结构。批注要求一针见血，直指痛点。
+3. **必须包含以下三大核心部分**：
 
-### 0. 期刊基本学术属性与 SCI / 中科院分区评估
-请结合给出的期刊元数据（ISSN, H-index, 估算影响因子等），依托你的前沿学术数据库知识，给出以下核心指标的权威对标（必须明确写出）：
-- **期刊收录属性**：标明是否为 SCI, SCIE, SSCI, AHCI 或 ESCI 收录。
-- **JCR 分区**：指出该期刊在 JCR 中的官方分区等级 (Q1, Q2, Q3 或 Q4) 及其主要分类领域。
-- **中科院分区 (CAS Partition)**：指出该期刊在最新版“中科院期刊分区表”中的**大类学科分区**（一区/二区/三区/四区，Top期刊属性）及**代表性小类学科分区**。
-- **影响力简评**：结合 H-index 和 影响因子 (Impact Factor) 评估该刊在所在细分领域内的学术地位与投递难度。
+---
 
-### 1. 范式与方法论倾向量化解读
-深入分析各种研究方法占比数据。说明该刊在定量实证、定性案例、混合研究或计算社会科学/AI仿真等新范式上的偏好分布，以及不同研究范式的均次被引情况。
+## 一、 目标期刊选稿偏好与近期趋势客观看板 (Objective Preferences & Trend Dashboard)
 
-### 2. 理论框架与研究视角矩阵
-归纳总结该刊高频出现的理论视角（Top Theories），并建议作者在文献综述与理论构建时着重关注的核心理论话语场域。
+### 0. 期刊基本学术属性与 SCI / 中科院分区表
+用单列表格呈现以下字段：
+* 官方 ISSN、H-index 影响力指数、估算影响因子 (Estimated IF)。
+* 最新 **JCR 分区**（注明大类与代表性小类分类领域）。
+* 最新 **中科院分区**（注明大类分区、代表性小类学科分区、以及是否为 Top 期刊）。
 
-### 3. 样本量级与分析工具要求
-针对实证或数据分析类研究，梳理该刊在有效样本量（最小值、中位数以及期望门槛）以及统计计量/机器学习分析工具链上的特征要求。
+### 1. 研究范式与方法论分布表 (Paradigm & Methodology Distribution)
+* 用表格呈现各研究范式的占比与平均被引次数。
+* **### 📌 范式解读批注**：字数控制在 100 字内。必须以真实文献（如 `《论文标题》`）举例说明该刊高引范式的特征。
 
-### 4. 近期热点文章与创新点剖析
-结合高被引代表性研究，总结该刊近年来在选题新颖性与研究贡献上的典型风向。
+### 2. 理论框架、工具与样本门槛指标表 (Theories, Tools & Sample Thresholds)
+* 用表格形式呈现：排名前列的核心理论框架（Top Theories）、常用分析工具链（Top Tools）以及定量分析的样本规模区间（Median/Min/Max）。
+* **### 📌 指标解读批注**：用极简短的 2 行字说明样本与工具的隐形门槛。
 
-## 二、 【独家解密】审稿人“出题人”心思与审稿会内幕曝光 (Exclusive Reviewer Mindset Deconstruction)
-【排版与文风铁律：拒绝长篇大论和机械 AI 腔！严禁堆砌“如果……那么……”式冗长说教。必须言简意赅、短平快、像圈内资深主编在闭门研讨会上抽丝剥茧的内幕吐槽与金句清单！】
-请以资深主编和最苛刻审稿人的闭门内幕视角，独家解剖 `{journal_name}` 阅卷组的“内部评分细则”：
-1. **🔥 3分钟初审生死线（AE 判断秒表）**：用最精炼的 3 个要点说明：主编第一眼扫过标题摘要、第二眼看引言框架、第三眼看图表方程时，各自在挑剔什么？踩中哪一条直接判处 Desk Reject？
-2. **👀 圈内“学术偏口”与隐藏心头好**：用“一句话揭秘”方式，说明该刊审稿圈最吃哪套叙事逻辑（理论深度/推导范式/数据完备度等），如何包装能让审稿人秒产生“这是小同行”的好感？
-3. **💥 审稿意见“高频狙击刺刀”（Top 3 常用拒稿话术原型）**：直接模拟列出该刊同行评审意见（Review Report）中最常用、最致命的 3 支犀利质疑句式（如冷箭般切中要害）。
-4. **🚫 绝对不可碰的致命死穴**：一针见血列明必须死死避开的 3 个触之即死红线。
+---
 
-## 三、 定制化投稿对标与修稿策略 (Actionable Tailoring Strategy)
-{"请直接针对用户提供的上述论文草稿，给出短平快、极具实操价值的诊断与重构手术方案：" if user_draft_text else "请给出向该期刊投稿时的实用修稿策略与优化建议规范："}
-1. **标题与摘要（Title & Abstract）重构手术**：给出直接可抄作业或对标重构的标题建议模板、摘要 4 句结构精简写法。
-2. **引言与鸿沟（Introduction & Gap）包装话术**：指导如何把平铺直叙的研究背景包装成符合该刊高段位偏好的研究痛点。
-3. **方法与稳健性（Methodology & Robustness）补强建议**：指出必须在投稿前补上的 1~2 个关键稳健性或理论推导补充。""" + (f"""
+## 二、 【核心杀手锏】用户稿件 vs 近年最相似的 3 篇已发表文献深度对比矩阵 (Contrastive Diagnosis)
+*(若用户提供了草稿，请将草稿与 Layer ③ 算出的 3 篇相似文献做严格的矩阵对标；若未提供草稿，则与典型已发表论文做对比)*
 
-### 🔥 [独家模拟审稿] 资深审稿人对本稿件的 3 连刁难与防刺杀破招
-以 `{journal_name}` 最挑剔审稿人的毒舌视角，直接对上面上传的论文文字提出 **3 个一针见血的模拟质疑报告（Review Comments）**，并紧接着对每一条给出正式投稿前**预判封口修稿破招（Preemptive Defense Strategy）**（话术精炼、干货拉满、立竿见影）：
-- **🔪 模拟刁难质疑 1**：...
-  **🛡️ 投稿前修稿破招**：...
-- **🔪 模拟刁难质疑 2**：...
-  **🛡️ 投稿前修稿破招**：...
-- **🔪 模拟刁难质疑 3**：...
-  **🛡️ 投稿前修稿破招**：...""" if user_draft_text else "") + """
+### 1. 维度对比对标矩阵表
+请构建一个 Markdown 表格，对比以下列：
+`对标维度` | `你的论文草稿` | `相似文献1:《标题》 (IF/被引)` | `相似文献2:《标题》 (IF/被引)` | `相似文献3:《标题》 (IF/被引)`
+表格行必须包含：
+* **核心研究范式** (定量实证/定性案例/混合方法/理论推导/计算仿真)
+* **核心理论视角** (引入的理论框架与核心构念)
+* **样本规模与数据来源** (具体数据源与 N 的量级)
+* **核心分析工具与模型** (使用的计量模型、统计方法或机器学习工具)
+* **创新贡献定位** (如何向主编写故事/贡献点落脚处)
 
-排版请使用规范清晰的 Markdown 格式，多用短句和金句清单，全篇保持高信噪比与内部揭秘真实感！
+### 2. 🚨 审稿人视角：致命差异狙击点 (Reviewer's Attack Vectors)
+请站在最苛刻审稿人视角，用极具攻击性、简短有力的 Bullet 点，指出你的草稿与这 3 篇已录用相似文献之间的 **3 个致命硬伤差在哪里**（例如：样本量相差两个数量级、缺乏物理第一性原理模型推导、完全忽视了某理论构念等）。
+
+---
+
+## 三、 【独家解密】审稿人“出题人”心思与防御性修稿破招 (Preemptive Defense)
+
+### 1. ⏱️ 3分钟初审生死线（AE 心里的淘汰秒表）
+用 3 句短话，列出主编在前 180 秒内扫描你的标题摘要、引言框架、图表方程时，会因为什么致命表述立刻做出 Desk Reject 决定。（不准废话）。
+
+### 2. 🛡️ 投稿前预判封口修改方案 (Preemptive Defenses)
+针对第二部分发现的致命差异，给出**立竿见影的防御性修改方案**：
+* 给出具体的修改前（Before） vs 修改后（After）的标题、摘要或论证句式示例。
+* 指明为了堵住审稿人的嘴，你必须在投稿前补上什么图表、稳健性检验或数学物理包装。
 """
 
         system_prompt = (
-            "You are a distinguished, plain-spoken Associate Editor and insider at a top academic journal. "
-            "You write crystal-clear, razor-sharp, punchy, and highly actionable journal profiles and exclusive inside deconstructions in professional Chinese, avoiding robotic filler or verbose AI fluff."
+            "You are a distinguished, direct-talking Associate Editor. "
+            "You write highly structured, evidence-backed diagnostic reports featuring data tables and sharp, citation-driven bullet points in professional Chinese. "
+            "You hate robotic filler, verbose AI prose, and empty generalizations. Every claim you make is proved by citing a real paper title."
         )
 
         try:
             report_content = self.llm.call(
                 prompt=prompt,
                 system_prompt=system_prompt,
-                temperature=0.35,
+                temperature=0.18, # 极低温度，防止大模型自由编造散文
                 max_retries=3,
             )
-            logger.info("画像与策略建议报告生成完毕。")
+            logger.info("对标诊断报告生成完毕。")
             return report_content
         except Exception as e:
             logger.error(f"生成报告异常: {str(e)}")

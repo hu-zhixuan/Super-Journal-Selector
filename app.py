@@ -226,6 +226,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             if feat:
                 feat_dict = feat.model_dump()
                 feat_dict["title"] = paper.title
+                feat_dict["abstract"] = paper.abstract
                 feat_dict["cited_by_count"] = paper.cited_by_count
                 feat_dict["publication_year"] = paper.publication_year
                 extracted_features.append(feat_dict)
@@ -234,16 +235,16 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""
             return
 
+        draft_text = final_draft_text.strip() if final_draft_text and final_draft_text.strip() else None
+
         # Layer ③: 纯代码统计聚合
-        yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布与中位数...", ""
+        yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布并执行文献相似度诊断...", ""
         aggregator = ProfileAggregator()
-        aggregated_stats = aggregator.aggregate(extracted_features)
+        aggregated_stats = aggregator.aggregate(extracted_features, user_draft_text=draft_text)
 
         # Layer ④: LLM 生成偏好画像与策略报告
         yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", ""
         generator = ProfileGenerator()
-        
-        draft_text = final_draft_text.strip() if final_draft_text and final_draft_text.strip() else None
         
         report_markdown = generator.generate_report(
             journal_name=journal_name,

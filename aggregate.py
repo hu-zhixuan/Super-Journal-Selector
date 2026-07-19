@@ -1,5 +1,6 @@
 import logging
-from typing import List, Dict, Any
+import re
+from typing import List, Dict, Any, Optional
 from collections import Counter
 import statistics
 
@@ -8,19 +9,51 @@ logger = logging.getLogger(__name__)
 
 class ProfileAggregator:
     """
-    层③：纯代码统计聚合层。不依赖 LLM，仅基于纯粹的统计计算与数据清洗，将数十篇单文结构化特征聚合为高浓度的维度分布指标。
+    层③：纯代码统计聚合层。不依赖 LLM，以 0-Token 消耗的纯 Python 统计函数进行指标计算，
+    并内置文本余弦相似度算法对标用户草稿，筛选出 Top 3 最相似的近年发表文献。
     """
 
     @staticmethod
-    def aggregate(features_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def calculate_cosine_similarity(text1: str, text2: str) -> float:
         """
-        计算方法学占比、高频理论矩阵、分析模型热度榜以及样本阈值分布
+        基于词频（Bag of Words）计算两个文本段落的余弦相似度
+        """
+        if not text1 or not text2:
+            return 0.0
+        
+        def get_words(t: str) -> List[str]:
+            # 转小写并提取单词，过滤标点
+            return re.findall(r'\b\w+\b', t.lower())
+
+        w1 = get_words(text1)
+        w2 = get_words(text2)
+        if not w1 or not w2:
+            return 0.0
+
+        c1 = Counter(w1)
+        c2 = Counter(w2)
+        
+        all_words = set(c1.keys()).union(set(c2.keys()))
+        
+        # 向量点积与模长计算
+        dot_product = sum(c1.get(w, 0) * c2.get(w, 0) for w in all_words)
+        mag1 = sum(v ** 2 for v in c1.values()) ** 0.5
+        mag2 = sum(v ** 2 for v in c2.values()) ** 0.5
+        
+        if not mag1 or not mag2:
+            return 0.0
+        return dot_product / (mag1 * mag2)
+
+    @staticmethod
+    def aggregate(features_list: List[Dict[str, Any]], user_draft_text: Optional[str] = None) -> Dict[str, Any]:
+        """
+        计算方法学占比、高频理论矩阵、分析模型热度榜、样本阈值分布，并基于余弦相似度找出 Top 3 最对标的已发表论文。
         """
         total_count = len(features_list)
         if total_count == 0:
             raise ValueError("传入的结构化特征列表为空，无法进行统计聚合。")
 
-        logger.info(f"正在对 {total_count} 篇结构化数据进行多维度统计聚合计算...")
+        logger.info(f"正在对 {total_count} 篇文献的特征进行多维度统计聚合与对标相似度计算...")
 
         # 1. 研究范式（分类统计）分布与占比
         method_counts = Counter([f.get("method_category", "Other") for f in features_list])
@@ -32,7 +65,7 @@ class ProfileAggregator:
             for category, count in method_counts.most_common()
         }
 
-        # 2. 各研究范式下的平均被引权重（展示哪类文章在该刊最常产出高引爆款）
+        # 2. 各研究范式下的平均被引权重
         method_citations: Dict[str, List[int]] = {}
         for f in features_list:
             cat = f.get("method_category", "Other")
@@ -100,6 +133,30 @@ class ProfileAggregator:
             for item in sorted_by_citations[:5]
         ]
 
+        # 7. 基于余弦相似度，计算与用户当前论文草稿最相似的 Top 3 篇已发表文献
+        most_similar_papers = []
+        if user_draft_text and user_draft_text.strip():
+            similarities = []
+            for f in features_list:
+                paper_content = (f.get("title", "") + " " + f.get("abstract", "")).strip()
+                sim = ProfileAggregator.calculate_cosine_similarity(user_draft_text, paper_content)
+                similarities.append((sim, f))
+            
+            # 按相似度降序排列
+            similarities.sort(key=lambda x: x[0], reverse=True)
+            for sim, f in similarities[:3]:
+                most_similar_papers.append({
+                    "title": f.get("title", ""),
+                    "similarity_score": round(sim, 3),
+                    "method_category": f.get("method_category", ""),
+                    "sample_description": f.get("sample_description", ""),
+                    "theoretical_frameworks": f.get("theoretical_frameworks", []),
+                    "analytical_tools": f.get("analytical_tools", []),
+                    "novelty_highlight": f.get("novelty_highlight", ""),
+                    "publication_year": f.get("publication_year", 0),
+                    "cited_by_count": f.get("cited_by_count", 0)
+                })
+
         aggregated_data = {
             "total_papers_analyzed": total_count,
             "method_distribution": method_distribution,
@@ -108,7 +165,8 @@ class ProfileAggregator:
             "top_theories": [{"name": name, "count": cnt} for name, cnt in top_theories],
             "top_tools": [{"name": name, "count": cnt} for name, cnt in top_tools],
             "representative_novelties": representative_novelties,
+            "most_similar_papers": most_similar_papers,
         }
 
-        logger.info("统计聚合完成。")
+        logger.info(f"统计与对标相似度聚合计算完成。最相似文献匹配数: {len(most_similar_papers)}")
         return aggregated_data
