@@ -5,6 +5,10 @@ import urllib3.util.connection as urllib3_cn
 import gradio as gr
 from dotenv import load_dotenv
 
+# 引入文档解析库
+import docx
+import pypdf
+
 # 导入流水线模块
 from fetch_papers import OpenAlexFetcher
 from extract_features import FeatureExtractor
@@ -30,6 +34,42 @@ if not hasattr(urllib3_cn, "_orig_create_connection"):
 # ===============================================================
 
 
+def parse_docx(file_path: str) -> str:
+    """
+    解析 Word 文档，只读取前 50 个非空段落（包含 Title/Abstract/Intro，避免 Token 浪费）
+    """
+    try:
+        doc = docx.Document(file_path)
+        paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        # 截取前 50 段
+        limited_text = "\n".join(paragraphs[:50])
+        logger.info(f"成功解析 Word，截取前 50 段，共 {len(limited_text)} 字。")
+        return limited_text
+    except Exception as e:
+        logger.error(f"解析 Word 失败: {e}")
+        return f"[Word 解析失败]: {str(e)}"
+
+
+def parse_pdf(file_path: str) -> str:
+    """
+    解析 PDF 文档，只读取前 4 页（包含 Title/Abstract/Intro，避免 Token 浪费）
+    """
+    try:
+        reader = pypdf.PdfReader(file_path)
+        pages_to_read = min(len(reader.pages), 4)  # 只读前 4 页
+        text_list = []
+        for i in range(pages_to_read):
+            page_text = reader.pages[i].extract_text()
+            if page_text:
+                text_list.append(page_text)
+        limited_text = "\n".join(text_list)
+        logger.info(f"成功解析 PDF，读取前 {pages_to_read} 页，共 {len(limited_text)} 字。")
+        return limited_text
+    except Exception as e:
+        logger.error(f"解析 PDF 失败: {e}")
+        return f"[PDF 解析失败]: {str(e)}"
+
+
 def search_journals(query: str):
     """
     调用 OpenAlex 的 Autocomplete API 联想检索期刊名
@@ -40,15 +80,12 @@ def search_journals(query: str):
     url = "https://api.openalex.org/autocomplete/sources"
     params = {"q": query}
     try:
-        # 强制直连绕过代理
         resp = requests.get(url, params=params, proxies={"http": None, "https": None}, timeout=5)
         if resp.status_code == 200:
             results = resp.json().get("results", [])
-            # 过滤并提取期刊名
             choices = [item.get("display_name") for item in results if item.get("display_name")]
             choices = list(dict.fromkeys(choices))  # 去重
             if choices:
-                # 实时更新下拉框的候选列表，并默认选中第一个
                 return gr.Dropdown(choices=choices, value=choices[0])
     except Exception as e:
         logger.warning(f"期刊联想搜索失败: {e}")
@@ -56,14 +93,31 @@ def search_journals(query: str):
     return gr.Dropdown(choices=[])
 
 
-def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str):
+def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str, file_obj):
     """
-    网页端调用的生成函数。使用 yield 机制，将运行进度实时吐给前端网页显示。
+    网页端调用的生成函数。支持文件解析优先逻辑。
     """
     journal_name = journal_name.strip() if journal_name else ""
     if not journal_name:
         yield "❌ 错误：请先在上方输入期刊关键词并选择一个目标期刊！", ""
         return
+
+    # 优先解析上传的文档文件
+    final_draft_text = ""
+    if file_obj is not None:
+        file_path = file_obj.name
+        ext = os.path.splitext(file_path)[1].lower()
+        yield f"⏳ 正在解析上传的 {ext} 文档（仅读取前4页/段落以防浪费 Token）...", ""
+        
+        if ext == ".docx":
+            final_draft_text = parse_docx(file_path)
+        elif ext == ".pdf":
+            final_draft_text = parse_pdf(file_path)
+        else:
+            yield f"❌ 错误：不支持的文档格式 {ext}，仅支持 .docx 和 .pdf 格式！", ""
+            return
+    else:
+        final_draft_text = user_draft.strip() if user_draft else ""
 
     try:
         # Layer ①: 抓取数据
@@ -110,7 +164,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", ""
         generator = ProfileGenerator()
         
-        draft_text = user_draft.strip() if user_draft and user_draft.strip() else None
+        draft_text = final_draft_text.strip() if final_draft_text and final_draft_text.strip() else None
         
         report_markdown = generator.generate_report(
             journal_name=journal_name,
@@ -179,11 +233,19 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
                     label="最大采样文献篇数"
                 )
                 
-            draft_input = gr.Textbox(
-                label="你的论文摘要/草稿 (可选，用于定制化改写对标)",
-                placeholder="在此粘贴拟投稿论文的 Title/Abstract/大纲，系统将给出字面级的手术重构方案...",
-                lines=8
-            )
+            # 输入方式卡片：提供粘贴文本和文件上传两种选择
+            with gr.Tab("📝 选项 A：手动粘贴摘要/草稿"):
+                draft_input = gr.Textbox(
+                    label="粘贴拟投稿论文的 Title/Abstract/大纲",
+                    placeholder="在此粘贴，系统将给出字面级的手术重构方案...",
+                    lines=8
+                )
+                
+            with gr.Tab("📁 选项 B：上传草稿文件 (解析前4页)"):
+                file_input = gr.File(
+                    label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
+                    file_types=[".docx", ".pdf"]
+                )
             
             submit_btn = gr.Button("🚀 一键生成期刊选稿画像", variant="primary")
             
@@ -206,13 +268,12 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
         outputs=journal_input
     )
 
-    # 按钮点击事件绑定
+    # 按钮点击事件绑定 (将 file_input 接入输入列表)
     submit_btn.click(
         fn=run_pipeline,
-        inputs=[journal_input, years_input, max_papers_input, draft_input],
+        inputs=[journal_input, years_input, max_papers_input, draft_input, file_input],
         outputs=[status_output, report_output]
     )
 
 if __name__ == "__main__":
-    # 启动本地服务，自动打开浏览器，并将 theme 传入 launch() 中以符合 Gradio 6.0 规范
     demo.launch(server_name="127.0.0.1", server_port=7860, share=False, theme=theme)
