@@ -81,7 +81,7 @@ def main():
     # Layer ①: 抓取数据
     logger.info("--- Layer ①: 进入开放文献抓取层 (OpenAlex API) ---")
     fetcher = OpenAlexFetcher()
-    papers = fetcher.fetch_recent_papers(
+    papers, journal_metadata = fetcher.fetch_recent_papers(
         journal_name=journal_name,
         years=args.years,
         max_papers=args.max_papers,
@@ -109,6 +109,7 @@ def main():
     report_markdown = generator.generate_report(
         journal_name=journal_name,
         aggregated_stats=aggregated_stats,
+        journal_metadata=journal_metadata,
         user_draft_text=user_draft_text,
     )
 

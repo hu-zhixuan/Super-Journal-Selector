@@ -123,7 +123,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         # Layer ①: 抓取数据
         yield "⏳ [1/4] 正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...", ""
         fetcher = OpenAlexFetcher()
-        papers = fetcher.fetch_recent_papers(
+        papers, journal_metadata = fetcher.fetch_recent_papers(
             journal_name=journal_name,
             years=int(years),
             max_papers=int(max_papers),
@@ -169,6 +169,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         report_markdown = generator.generate_report(
             journal_name=journal_name,
             aggregated_stats=aggregated_stats,
+            journal_metadata=journal_metadata,
             user_draft_text=draft_text
         )
 
