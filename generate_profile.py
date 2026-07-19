@@ -84,34 +84,35 @@ class ProfileGenerator:
 ### 4. 近期热点文章与创新点剖析
 结合高被引代表性研究，总结该刊近年来在选题新颖性与研究贡献上的典型风向。
 
-## 二、 审稿人“出题人思维”解构与隐形潜规则 (Reviewer Mindset & Hidden Rubrics)
-把主编与同行审稿人当做“高考命题组与阅卷专家”，深度揭秘他们在审查 `{journal_name}` 投稿时的内部心理机制与隐形门槛：
-1. **⏱️ 3分钟初审“生死线”（AE & Reviewer Screening Checklist）**：主编（AE）和审稿人拿到稿件后最前 3 分钟最看重哪里？什么样的话术、结构逻辑或图表呈现会让审稿人立刻产生“此文学术段位不高”的负面定势？
-2. **🎯 圈内“心头好”与偏口（Hidden Darlings & Biases）**：该刊审稿组最偏爱看哪几类理论叙事套路、假说推理风格或方法论完备性？哪些“讨巧”的补充数据或实证检验能让审稿人立刻点头赞许？
-3. **⚔️ 审稿报告“高频狙击武器库”（Top 3 Attack Vectors）**：在该刊的同行评审意见（Review Report）中，审稿人为了找刺或要求大修/拒稿，最常射出的 3 支冷箭是什么？（例如：内生性控制与稳健性不足、理论增量仅停留于表面说明、对某主流学派核心文献的忽视等）。
-4. **💀 初审拒稿与踩雷禁忌（Desk Reject Red Flags）**：结合量化统计结果中极低占比的方法类型或潜在的数据学短板，列明必须死死规避的 3~4 个致命踩雷点。
+## 二、 【独家解密】审稿人“出题人”心思与审稿会内幕曝光 (Exclusive Reviewer Mindset Deconstruction)
+【排版与文风铁律：拒绝长篇大论和机械 AI 腔！严禁堆砌“如果……那么……”式冗长说教。必须言简意赅、短平快、像圈内资深主编在闭门研讨会上抽丝剥茧的内幕吐槽与金句清单！】
+请以资深主编和最苛刻审稿人的闭门内幕视角，独家解剖 `{journal_name}` 阅卷组的“内部评分细则”：
+1. **🔥 3分钟初审生死线（AE 判断秒表）**：用最精炼的 3 个要点说明：主编第一眼扫过标题摘要、第二眼看引言框架、第三眼看图表方程时，各自在挑剔什么？踩中哪一条直接判处 Desk Reject？
+2. **👀 圈内“学术偏口”与隐藏心头好**：用“一句话揭秘”方式，说明该刊审稿圈最吃哪套叙事逻辑（理论深度/推导范式/数据完备度等），如何包装能让审稿人秒产生“这是小同行”的好感？
+3. **💥 审稿意见“高频狙击刺刀”（Top 3 常用拒稿话术原型）**：直接模拟列出该刊同行评审意见（Review Report）中最常用、最致命的 3 支犀利质疑句式（如冷箭般切中要害）。
+4. **🚫 绝对不可碰的致命死穴**：一针见血列明必须死死避开的 3 个触之即死红线。
 
 ## 三、 定制化投稿对标与修稿策略 (Actionable Tailoring Strategy)
-{"请直接针对用户提供的上述论文草稿，给出建设性、针对性的诊断意见与改进方案：" if user_draft_text else "请给出向该期刊投稿时的实用修稿策略与优化建议规范："}
-1. **标题与摘要（Title & Abstract）重构技巧**：说明如何优化标题与摘要的结构，使其精准契合该刊的学术风格与重点关切，并结合实例或模板展示。
-2. **引言与动机（Introduction & Motivation）强化**：指导如何构建清晰的研究鸿沟（Research Gap），突出研究的必要性与重要性。
-3. **方法论与稳健性（Methodological Robustness）建议**：针对实证检验细节或数据处理分析，提出有助于提升论文严谨度与说服力的具体补充方案。""" + (f"""
+{"请直接针对用户提供的上述论文草稿，给出短平快、极具实操价值的诊断与重构手术方案：" if user_draft_text else "请给出向该期刊投稿时的实用修稿策略与优化建议规范："}
+1. **标题与摘要（Title & Abstract）重构手术**：给出直接可抄作业或对标重构的标题建议模板、摘要 4 句结构精简写法。
+2. **引言与鸿沟（Introduction & Gap）包装话术**：指导如何把平铺直叙的研究背景包装成符合该刊高段位偏好的研究痛点。
+3. **方法与稳健性（Methodology & Robustness）补强建议**：指出必须在投稿前补上的 1~2 个关键稳健性或理论推导补充。""" + (f"""
 
-### 🔥 [实战模拟] 严苛审稿人对本草稿的 3 连犀利质疑与防御修稿破招
-假设你的论文草稿现在正放在 `{journal_name}` 最严苛的高级审稿人案头。请以他的挑剔视角，直接针对上面上传的文本，写出你在审稿报告中会面临的 **3 个最犀利、最毒辣的质疑意见**，并紧接着给出你在 formal 投稿前必须作出的**防御性修稿破招方案**：
-- **🔪 模拟刁难质疑 1（审稿人视角攻击点）**：...
-  **🛡️ 防御修稿破招（投稿前预判补强）**：...
-- **🔪 模拟刁难质疑 2（审稿人视角攻击点）**：...
-  **🛡️ 防御修稿破招（投稿前预判补强）**：...
-- **🔪 模拟刁难质疑 3（审稿人视角攻击点）**：...
-  **🛡️ 防御修稿破招（投稿前预判补强）**：...""" if user_draft_text else "") + """
+### 🔥 [独家模拟审稿] 资深审稿人对本稿件的 3 连刁难与防刺杀破招
+以 `{journal_name}` 最挑剔审稿人的毒舌视角，直接对上面上传的论文文字提出 **3 个一针见血的模拟质疑报告（Review Comments）**，并紧接着对每一条给出正式投稿前**预判封口修稿破招（Preemptive Defense Strategy）**（话术精炼、干货拉满、立竿见影）：
+- **🔪 模拟刁难质疑 1**：...
+  **🛡️ 投稿前修稿破招**：...
+- **🔪 模拟刁难质疑 2**：...
+  **🛡️ 投稿前修稿破招**：...
+- **🔪 模拟刁难质疑 3**：...
+  **🛡️ 投稿前修稿破招**：...""" if user_draft_text else "") + """
 
-排版请使用规范清晰的 Markdown 格式，合理利用表格、列表与加粗标注，使整份报告结构清晰、内容扎实、便于学者阅读与实操使用。
+排版请使用规范清晰的 Markdown 格式，多用短句和金句清单，全篇保持高信噪比与内部揭秘真实感！
 """
 
         system_prompt = (
-            "You are a distinguished Associate Editor and quantitative research analyst at a leading academic journal. "
-            "You provide insightful, rigorous, objective, and highly professional journal profiles and revision strategies in clear academic Chinese."
+            "You are a distinguished, plain-spoken Associate Editor and insider at a top academic journal. "
+            "You write crystal-clear, razor-sharp, punchy, and highly actionable journal profiles and exclusive inside deconstructions in professional Chinese, avoiding robotic filler or verbose AI fluff."
         )
 
         try:
