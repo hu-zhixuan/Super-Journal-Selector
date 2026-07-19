@@ -133,12 +133,20 @@ class ProfileAggregator:
             for item in sorted_by_citations[:5]
         ]
 
-        # 7. 基于余弦相似度，计算与用户当前论文草稿最相似的 Top 3 篇已发表文献
+        # 7. 基于余弦相似度，在大样本真实发表池中计算与用户当前论文草稿最相似的 Top 3 篇已发表标杆
         most_similar_papers = []
         if user_draft_text and user_draft_text.strip():
             similarities = []
             for f in features_list:
-                paper_content = (f.get("title", "") + " " + f.get("abstract", "")).strip()
+                # 将标题、摘要、理论构念、分析工具与 OpenAlex 概念关键词融合，构建高维度语义向量文本
+                semantic_elements = [
+                    f.get("title", ""),
+                    f.get("abstract", ""),
+                    " ".join(f.get("theoretical_frameworks", [])),
+                    " ".join(f.get("analytical_tools", [])),
+                    " ".join(f.get("concepts", [])),
+                ]
+                paper_content = " ".join([elem for elem in semantic_elements if elem]).strip()
                 sim = ProfileAggregator.calculate_cosine_similarity(user_draft_text, paper_content)
                 similarities.append((sim, f))
             
@@ -154,7 +162,8 @@ class ProfileAggregator:
                     "analytical_tools": f.get("analytical_tools", []),
                     "novelty_highlight": f.get("novelty_highlight", ""),
                     "publication_year": f.get("publication_year", 0),
-                    "cited_by_count": f.get("cited_by_count", 0)
+                    "cited_by_count": f.get("cited_by_count", 0),
+                    "concepts": f.get("concepts", [])
                 })
 
         aggregated_data = {

@@ -17,6 +17,11 @@ class PaperRecord:
     publication_year: int
     cited_by_count: int
     source_title: str
+    concepts: List[str] = None
+
+    def __post_init__(self):
+        if self.concepts is None:
+            self.concepts = []
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -25,7 +30,7 @@ class PaperRecord:
 class OpenAlexFetcher:
     """
     层①：数据抓取层。封装 OpenAlex 开放 API（无需 key），获取目标期刊最近N年的论文摘要文本并结构化。
-    最新升级：支持清洗符号后的名字匹配，并根据 counts_by_year 统计近期发文活跃度，优先选择最新的活跃数据库条目。
+    最新升级：支持百篇级大样本容量抓取与概念关键词提取，优先选择最新的活跃数据库条目，大幅提升对标聚类的特殊指向性。
     """
 
     BASE_URL = "https://api.openalex.org"
@@ -111,10 +116,10 @@ class OpenAlexFetcher:
         return " ".join([item["word"] for item in word_list])
 
     def fetch_recent_papers(
-        self, journal_name: str, years: int = 3, max_papers: int = 30
+        self, journal_name: str, years: int = 3, max_papers: int = 100
     ) -> Tuple[List[PaperRecord], Dict[str, Any]]:
         """
-        获取指定期刊最近几年内被引频次较好/最新的带摘要论文，同时返回期刊的元数据属性。
+        获取指定期刊最近几年内被引频次较好/最新的带摘要论文大样本（默认100篇以上），同时返回期刊元数据属性。
         返回格式：(papers_list, journal_metadata_dict)
         """
         source_info = self.resolve_journal_source(journal_name)
@@ -135,7 +140,7 @@ class OpenAlexFetcher:
             "estimated_impact_factor": summary_stats.get("2yr_mean_citedness", "N/A"),
             "works_count": source_info.get("works_count", "N/A"),
             "cited_by_count": source_info.get("cited_by_count", "N/A"),
-            "categories": [c.get("name") for c in x_concepts[:4] if c.get("name")]
+            "categories": [c.get("name") for c in x_concepts[:6] if c.get("name")]
         }
 
         current_year = datetime.now().year
@@ -145,24 +150,31 @@ class OpenAlexFetcher:
         filter_str = f"primary_location.source.id:{source_id},publication_year:>{min_year},has_abstract:true"
         url = f"{self.BASE_URL}/works"
         
+        # 扩大分页抓取量级，确保大样本容量能够一次性足量获取
+        fetch_limit = min(max(max_papers * 2, 100), 200)
         params = {
             "filter": filter_str,
             "sort": "cited_by_count:desc",
-            "per-page": min(max_papers * 2, 100),
+            "per-page": fetch_limit,
         }
 
         papers: List[PaperRecord] = []
         try:
-            logger.info(f"开始抓取期刊 '{source_display_name}' 近 {years} 年论文，上限 {max_papers} 篇...")
-            resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=20)
+            logger.info(f"开始抓取期刊 '{source_display_name}' 近 {years} 年大样本论文池，计划容量上限: {max_papers} 篇...")
+            resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25)
             resp.raise_for_status()
             data = resp.json()
             results = data.get("results", [])
 
             for item in results:
                 abstract_text = self._reconstruct_abstract(item.get("abstract_inverted_index"))
-                if len(abstract_text.split()) < 60:
+                if len(abstract_text.split()) < 50:
                     continue
+
+                # 提取概念关键词列表，为后续大样本聚类增加丰度
+                concept_names = [
+                    c.get("display_name") for c in item.get("concepts", [])[:6] if c.get("display_name")
+                ]
 
                 paper = PaperRecord(
                     id=item.get("id", ""),
@@ -172,14 +184,15 @@ class OpenAlexFetcher:
                     publication_year=item.get("publication_year", current_year),
                     cited_by_count=item.get("cited_by_count", 0),
                     source_title=source_display_name,
+                    concepts=concept_names,
                 )
                 papers.append(paper)
                 if len(papers) >= max_papers:
                     break
 
-            logger.info(f"抓取完成，获得有效摘要论文 {len(papers)} 篇。")
+            logger.info(f"大样本抓取完成，成功建立有效摘要与概念库条目 {len(papers)} 篇。")
             return papers, journal_metadata
 
         except Exception as e:
-            logger.error(f"获取 OpenAlex 论文列表失败: {str(e)}")
+            logger.error(f"获取 OpenAlex 论文大样本列表失败: {str(e)}")
             raise

@@ -53,8 +53,8 @@ def main():
     parser.add_argument(
         "-m", "--max-papers",
         type=int,
-        default=30,
-        help="抓取并解析的近期论文样本数量上限（默认: 30篇）"
+        default=100,
+        help="抓取并并发解析的近期论文大样本数量上限（默认: 100篇）"
     )
     parser.add_argument(
         "-u", "--user-draft",

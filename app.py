@@ -211,23 +211,10 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
 
         # Layer ②: LLM 结构化特征提取
         total_papers = len(papers)
-        yield f"⏳ [2/4] 成功抓取 {total_papers} 篇有效论文。正在拉起大模型并发提取学术特征...", ""
+        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=10)...", ""
         
         extractor = FeatureExtractor()
-        extracted_features = []
-        
-        for idx, paper in enumerate(papers):
-            progress_msg = f"⏳ [2/4] 正在使用大模型解析文献特征 (进度: {idx + 1}/{total_papers})...\n文献: 《{paper.title[:45]}...》"
-            yield progress_msg, ""
-            
-            feat = extractor.extract_paper(paper)
-            if feat:
-                feat_dict = feat.model_dump()
-                feat_dict["title"] = paper.title
-                feat_dict["abstract"] = paper.abstract
-                feat_dict["cited_by_count"] = paper.cited_by_count
-                feat_dict["publication_year"] = paper.publication_year
-                extracted_features.append(feat_dict)
+        extracted_features = extractor.extract_batch(papers, max_workers=10)
                 
         if not extracted_features:
             yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""
@@ -308,8 +295,8 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
                     label="数据回溯年份"
                 )
                 max_papers_input = gr.Slider(
-                    minimum=5, maximum=40, value=15, step=5,
-                    label="最大采样文献篇数"
+                    minimum=20, maximum=200, value=100, step=10,
+                    label="大样本并发采样文献数 (100+高特异性指向)"
                 )
                 
             # 输入方式卡片：提供粘贴文本和文件上传两种选择

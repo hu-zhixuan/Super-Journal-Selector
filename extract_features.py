@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from llm_client import LLMClient
 from fetch_papers import PaperRecord
 
@@ -36,7 +37,7 @@ class ExtractedFeatures(BaseModel):
 
 class FeatureExtractor:
     """
-    层②：结构化提取层。通过 LLM 把非结构化英文摘要转为统一规格的 Pydantic 实体字典。
+    层②：结构化提取层。通过并发调用 LLM，把大样本量非结构化英文摘要转为统一规格的 Pydantic 实体字典。
     """
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
@@ -72,22 +73,31 @@ Output MUST be clean valid JSON only without extra conversational markdown.
             logger.warning(f"论文 [{paper.title[:30]}...] 特征抽取出现异常: {str(e)}")
             return None
 
-    def extract_batch(self, papers: List[PaperRecord]) -> List[Dict[str, Any]]:
+    def extract_batch(self, papers: List[PaperRecord], max_workers: int = 10) -> List[Dict[str, Any]]:
         """
-        批量解析论文列表并汇总输出结构化数据
+        利用多线程池并发批量解析大样本论文列表，实现百篇级高频特征极速结构化抽取
         """
-        logger.info(f"开始使用 LLM 批量结构化解析 {len(papers)} 篇论文特征...")
+        logger.info(f"开始开启并发线程池 (Workers={max_workers})，批量结构化解析 {len(papers)} 篇大样本论文特征...")
         extracted_results: List[Dict[str, Any]] = []
 
-        for paper in tqdm(papers, desc="提取论文特征"):
-            feat = self.extract_paper(paper)
+        def process_one(p: PaperRecord) -> Optional[Dict[str, Any]]:
+            feat = self.extract_paper(p)
             if feat:
                 feat_dict = feat.model_dump()
-                # 附加上原始论文参数以便后续聚合与高引展示
-                feat_dict["title"] = paper.title
-                feat_dict["cited_by_count"] = paper.cited_by_count
-                feat_dict["publication_year"] = paper.publication_year
-                extracted_results.append(feat_dict)
+                feat_dict["title"] = p.title
+                feat_dict["abstract"] = p.abstract
+                feat_dict["cited_by_count"] = p.cited_by_count
+                feat_dict["publication_year"] = p.publication_year
+                feat_dict["concepts"] = getattr(p, "concepts", [])
+                return feat_dict
+            return None
 
-        logger.info(f"结构化解析完成，成功获得 {len(extracted_results)}/{len(papers)} 篇文献特征。")
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_paper = {executor.submit(process_one, p): p for p in papers}
+            for future in tqdm(as_completed(future_to_paper), total=len(papers), desc="大样本并发抽取"):
+                res = future.result()
+                if res:
+                    extracted_results.append(res)
+
+        logger.info(f"并发解析完成，成功获得 {len(extracted_results)}/{len(papers)} 篇大样本有效特征实体。")
         return extracted_results
