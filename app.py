@@ -4,6 +4,7 @@ import requests
 import urllib3.util.connection as urllib3_cn
 import gradio as gr
 from dotenv import load_dotenv
+from datetime import datetime
 
 # 引入文档解析库
 import docx
@@ -70,27 +71,105 @@ def parse_pdf(file_path: str) -> str:
         return f"[PDF 解析失败]: {str(e)}"
 
 
+# 学术圈高频缩写与中文俗称/别名智能映射字典
+JOURNAL_ALIASES = {
+    "pra": "Physical Review A",
+    "prl": "Physical Review Letters",
+    "prb": "Physical Review B",
+    "prd": "Physical Review D",
+    "prx": "Physical Review X",
+    "jacs": "Journal of the American Chemical Society",
+    "tpami": "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+    "pami": "IEEE Transactions on Pattern Analysis and Machine Intelligence",
+    "cvpr": "IEEE/CVF Conference on Computer Vision and Pattern Recognition",
+    "chb": "Computers in Human Behavior",
+    "nature": "Nature",
+    "自然": "Nature",
+    "science": "Science",
+    "科学": "Science",
+    "cell": "Cell",
+    "细胞": "Cell",
+    "lancet": "The Lancet",
+    "柳叶刀": "The Lancet",
+    "nejm": "New England Journal of Medicine",
+    "physica a": "Physica A: Statistical Mechanics and its Applications",
+    "amj": "Academy of Management Journal",
+    "amr": "Academy of Management Review",
+    "misq": "MIS Quarterly",
+    "isr": "Information Systems Research",
+}
+
+
 def search_journals(query: str):
     """
-    调用 OpenAlex 的 Autocomplete API 联想检索期刊名
+    智能期刊联想与索引引擎：
+    1. 支持英文缩写/中文别名智能映射；
+    2. 调用 OpenAlex 向量检索并统计近3年活跃发文量，剔除历史停更死链；
+    3. 生成带被引与发文标签的 [(Label, Value)] 结构，直观又准确。
     """
-    if not query or len(query.strip()) < 3:
-        return gr.Dropdown(choices=[])
+    q_clean = query.strip().lower() if query else ""
+    if not q_clean or len(q_clean) < 2:
+        return gr.Dropdown(choices=[], value=None)
+
+    search_terms = []
+    # 1. 如果命中缩写或别名，优先将其作为核心检索词
+    if q_clean in JOURNAL_ALIASES:
+        search_terms.append(JOURNAL_ALIASES[q_clean])
+    search_terms.append(query.strip())
+
+    candidates = []
+    seen_ids = set()
+    current_year = datetime.now().year
+
+    for term in search_terms:
+        url = "https://api.openalex.org/sources"
+        try:
+            resp = requests.get(
+                url, 
+                params={"search": term, "per-page": 6}, 
+                proxies={"http": None, "https": None}, 
+                timeout=5
+            )
+            if resp.status_code == 200:
+                results = resp.json().get("results", [])
+                for item in results:
+                    sid = item.get("id")
+                    if sid in seen_ids:
+                        continue
+                    seen_ids.add(sid)
+
+                    display_name = item.get("display_name", "Unknown")
+                    counts_by_year = item.get("counts_by_year", [])
+                    recent_works = sum(
+                        c.get("works_count", 0) 
+                        for c in counts_by_year 
+                        if c.get("year", 0) >= (current_year - 2)
+                    )
+                    
+                    summary_stats = item.get("summary_stats", {})
+                    if_est = summary_stats.get("2yr_mean_citedness", "N/A")
+                    if isinstance(if_est, float):
+                        if_est = f"{if_est:.1f}"
+
+                    # 过滤掉完全停更且在多结果干扰项中的历史条目
+                    if recent_works == 0 and len(results) > 2:
+                        continue
+
+                    # 构造富信息展示标签
+                    label = f"✨ {display_name} (近3年发文: {recent_works}篇 | 估算IF: {if_est})"
+                    # 如果正好是缩写别名对标上的正牌，赋予最高加权
+                    score = recent_works * (3 if q_clean in JOURNAL_ALIASES and display_name.lower() == JOURNAL_ALIASES[q_clean].lower() else 1)
+                    candidates.append((score, label, display_name))
+        except Exception as e:
+            logger.warning(f"智能联想检索异常: {e}")
+
+    # 按活跃权重降序排列，确保活的、顶级的、匹配准的期刊排在第一项
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    dropdown_choices = [(item[1], item[2]) for item in candidates[:6]]
     
-    url = "https://api.openalex.org/autocomplete/sources"
-    params = {"q": query}
-    try:
-        resp = requests.get(url, params=params, proxies={"http": None, "https": None}, timeout=5)
-        if resp.status_code == 200:
-            results = resp.json().get("results", [])
-            choices = [item.get("display_name") for item in results if item.get("display_name")]
-            choices = list(dict.fromkeys(choices))  # 去重
-            if choices:
-                return gr.Dropdown(choices=choices, value=choices[0])
-    except Exception as e:
-        logger.warning(f"期刊联想搜索失败: {e}")
-    
-    return gr.Dropdown(choices=[])
+    if dropdown_choices:
+        return gr.Dropdown(choices=dropdown_choices, value=dropdown_choices[0][1])
+    return gr.Dropdown(choices=[], value=None)
 
 
 def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str, file_obj):
