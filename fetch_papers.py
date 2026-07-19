@@ -42,7 +42,7 @@ class OpenAlexFetcher:
         url = f"{self.BASE_URL}/sources"
         params = {"search": journal_name, "per-page": 5}
         try:
-            resp = requests.get(url, params=params, headers=self.headers, timeout=15)
+            resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=15)
             resp.raise_for_status()
             data = resp.json()
             results = data.get("results", [])
@@ -107,7 +107,7 @@ class OpenAlexFetcher:
         papers: List[PaperRecord] = []
         try:
             logger.info(f"开始抓取期刊 '{source_display_name}' 近 {years} 年论文，上限 {max_papers} 篇...")
-            resp = requests.get(url, params=params, headers=self.headers, timeout=20)
+            resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=20)
             resp.raise_for_status()
             data = resp.json()
             results = data.get("results", [])
