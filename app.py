@@ -320,7 +320,7 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
                     lines=8
                 )
                 
-            with gr.Tab("📁 选项 B：上传草稿文件 (解析前4页)"):
+            with gr.Tab("📁 选项 B：上传草稿文件 (支持整篇全量对标)"):
                 file_input = gr.File(
                     label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
                     file_types=[".docx", ".pdf"]
