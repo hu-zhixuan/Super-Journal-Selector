@@ -37,15 +37,14 @@ if not hasattr(urllib3_cn, "_orig_create_connection"):
 
 def parse_docx(file_path: str) -> str:
     """
-    解析 Word 文档，只读取前 50 个非空段落（包含 Title/Abstract/Intro，避免 Token 浪费）
+    解析 Word 文档，读取完整内容进行高精度对标与诊断
     """
     try:
         doc = docx.Document(file_path)
         paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-        # 截取前 50 段
-        limited_text = "\n".join(paragraphs[:50])
-        logger.info(f"成功解析 Word，截取前 50 段，共 {len(limited_text)} 字。")
-        return limited_text
+        full_text = "\n".join(paragraphs)
+        logger.info(f"成功解析 Word，读取完整文档，共 {len(full_text)} 字。")
+        return full_text
     except Exception as e:
         logger.error(f"解析 Word 失败: {e}")
         return f"[Word 解析失败]: {str(e)}"
@@ -53,19 +52,18 @@ def parse_docx(file_path: str) -> str:
 
 def parse_pdf(file_path: str) -> str:
     """
-    解析 PDF 文档，只读取前 4 页（包含 Title/Abstract/Intro，避免 Token 浪费）
+    解析 PDF 文档，读取完整内容进行高精度对标与诊断
     """
     try:
         reader = pypdf.PdfReader(file_path)
-        pages_to_read = min(len(reader.pages), 4)  # 只读前 4 页
         text_list = []
-        for i in range(pages_to_read):
-            page_text = reader.pages[i].extract_text()
+        for page in reader.pages:
+            page_text = page.extract_text()
             if page_text:
                 text_list.append(page_text)
-        limited_text = "\n".join(text_list)
-        logger.info(f"成功解析 PDF，读取前 {pages_to_read} 页，共 {len(limited_text)} 字。")
-        return limited_text
+        full_text = "\n".join(text_list)
+        logger.info(f"成功解析 PDF，读取完整 {len(reader.pages)} 页，共 {len(full_text)} 字。")
+        return full_text
     except Exception as e:
         logger.error(f"解析 PDF 失败: {e}")
         return f"[PDF 解析失败]: {str(e)}"
@@ -186,7 +184,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
     if file_obj is not None:
         file_path = file_obj.name
         ext = os.path.splitext(file_path)[1].lower()
-        yield f"⏳ 正在解析上传的 {ext} 文档（仅读取前4页/段落以防浪费 Token）...", ""
+        yield f"⏳ 正在解析上传的 {ext} 完整学术文档，即将开始高精度对标与诊断...", ""
         
         if ext == ".docx":
             final_draft_text = parse_docx(file_path)
