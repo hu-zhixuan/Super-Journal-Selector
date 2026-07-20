@@ -110,26 +110,26 @@ class ProfileGenerator:
 * **核心分析工具与模型** (使用的计量模型、统计方法或机器学习工具)
 * **创新贡献定位** (如何向主编写故事/贡献点落脚处)
 
-### 2. 🚨 审稿人视角：致命差异狙击点 (Reviewer's Attack Vectors)
-请站在最苛刻审稿人视角，用极具攻击性、简短有力的 Bullet 点，指出你的草稿与这 3 篇已录用相似文献之间的 **3 个致命硬伤差在哪里**（例如：样本量相差两个数量级、缺乏物理第一性原理模型推导、完全忽视了某理论构念等）。
+### 2. 🔍 审稿人视角：核心差距诊断 (Reviewer's Objective Assessment)
+请站在客观、严谨且富有建设性的审稿人视角，用事实说话，指出你的草稿与这 3 篇已录用相似文献之间的 **3 个核心差距与不足**（如：模型复杂度的理论支撑差异、样本边界条件限制、或是分析方法的严密程度等）。请客观判断，区分“致命硬伤”（如方法错误）与“可改进项”（如补做控制或解释），切忌为了批评而刻意全盘否定。
 
 ---
 
-## 三、 【独家解密】审稿人“出题人”心思与防御性修稿破招 (Preemptive Defense)
+## 三、 【独家解密】审稿人关注焦点与防御性修稿策略 (Preemptive Defense)
 
-### 1. ⏱️ 3分钟初审生死线（AE 心里的淘汰秒表）
-用 3 句短话，列出主编在前 180 秒内扫描你的标题摘要、引言框架、图表方程时，会因为什么致命表述立刻做出 Desk Reject 决定。（不准废话）。
+### 1. ⏱️ 3分钟初审过滤器（AE 心中的关键评估项）
+用 3 句短话，列出主编在前 180 秒内扫描你的标题摘要、引言框架和核心方法时，最容易触发 Desk Reject 的几个**客观硬伤**（如研究问题过时、理论贡献陈述不清等），提供客观警示。
 
-### 2. 🛡️ 投稿前预判封口修改方案 (Preemptive Defenses)
-针对第二部分发现的致命差异，给出**立竿见影的防御性修改方案**：
+### 2. 🛡️ 投稿前防御性修改方案 (Actionable Defenses)
+针对第二部分发现的核心差距，给出**切实可行的防御性修改建议**：
 * 给出具体的修改前（Before） vs 修改后（After）的标题、摘要或论证句式示例。
-* 指明为了堵住审稿人的嘴，你必须在投稿前补上什么图表、稳健性检验或数学物理包装。
+* 指明如何通过补充实验、细化方法描述、或在讨论部分合理增加限制说明（Limitation）来堵住审稿人的质疑，帮助稿件达到录用门槛。
 """
 
         system_prompt = (
-            "You are a distinguished, direct-talking Associate Editor. "
-            "You write highly structured, evidence-backed diagnostic reports featuring data tables and sharp, citation-driven bullet points in professional Chinese. "
-            "You hate robotic filler, verbose AI prose, and empty generalizations. Every claim you make is proved by citing a real paper title."
+            "You are a fair, objective, and highly constructive Associate Editor. "
+            "You write highly structured, evidence-backed diagnostic reports featuring data tables and professional, balanced academic advice in Chinese. "
+            "You aim to point out real gaps based on empirical statistics while offering actionable paths for revision. Every claim you make is proved by citing a real paper title."
         )
 
         try:
