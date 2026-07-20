@@ -7,6 +7,49 @@ import statistics
 logger = logging.getLogger(__name__)
 
 
+def clean_and_truncate_draft(text: str, max_chars: int = 150000) -> str:
+    """
+    清洗并截断用户草稿：
+    1. 自动识别并切除文末无用的参考文献 (References / Bibliography / 参考文献)，腾出有效上下文。
+    2. 如果文本仍超长，执行保留头部与尾部的智能截断，压缩中间内容。
+    """
+    if not text:
+        return ""
+    
+    text_len = len(text)
+    # 在文章后 40% 的位置查找参考文献标识进行截断
+    search_start = int(text_len * 0.6)
+    
+    ref_patterns = [
+        r'\n\s*references\s*\n',
+        r'\n\s*bibliography\s*\n',
+        r'\n\s*works\s+cited\s*\n',
+        r'\n\s*参考文献\s*\n'
+    ]
+    
+    cutoff_idx = -1
+    for pattern in ref_patterns:
+        matches = list(re.finditer(pattern, text, re.IGNORECASE))
+        if matches:
+            last_match = matches[-1]
+            idx = last_match.start()
+            if idx >= search_start:
+                cutoff_idx = idx
+                break
+                
+    if cutoff_idx != -1:
+        logger.info(f"检测到文末参考文献章节，自动切除，节省约 {text_len - cutoff_idx} 字符。")
+        text = text[:cutoff_idx]
+        
+    if len(text) > max_chars:
+        keep_head = int(max_chars * 0.6)
+        keep_tail = int(max_chars * 0.4)
+        logger.info(f"文本仍超长 ({len(text)} 字符)，执行智能头部/尾部截留（保留前 {keep_head} 和后 {keep_tail} 字符）。")
+        text = text[:keep_head] + "\n\n... [此处因文本过长，中间部分细节已被自动压缩截断] ...\n\n" + text[-keep_tail:]
+        
+    return text
+
+
 class ProfileAggregator:
     """
     层③：纯代码统计聚合层。不依赖 LLM，以 0-Token 消耗的纯 Python 统计函数进行指标计算，
@@ -16,14 +59,33 @@ class ProfileAggregator:
     @staticmethod
     def calculate_cosine_similarity(text1: str, text2: str) -> float:
         """
-        基于词频（Bag of Words）计算两个文本段落的余弦相似度
+        基于词频（Bag of Words）计算两个文本段落的余弦相似度，过滤停用词以提高精准度
         """
         if not text1 or not text2:
             return 0.0
         
+        # 常见英文停用词表，过滤无实际语义的结构词
+        STOP_WORDS = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
+            'with', 'by', 'of', 'about', 'as', 'is', 'are', 'was', 'were', 'be',
+            'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+            'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must',
+            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 
+            'we', 'they', 'my', 'your', 'his', 'her', 'its', 'our', 'their',
+            'me', 'him', 'them', 'us', 'itself', 'themselves', 'ourselves', 
+            'myself', 'himself', 'herself', 'from', 'up', 'down', 'out', 'over', 
+            'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 
+            'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 
+            'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 
+            'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'now', 'which',
+            'who', 'whom', 'also', 'between', 'into', 'through', 'during', 'before',
+            'after', 'above', 'below'
+        }
+        
         def get_words(t: str) -> List[str]:
-            # 转小写并提取单词，过滤标点
-            return re.findall(r'\b\w+\b', t.lower())
+            # 转小写并提取单词，过滤标点及停用词，忽略单字母
+            words = re.findall(r'\b\w+\b', t.lower())
+            return [w for w in words if w not in STOP_WORDS and len(w) > 1]
 
         w1 = get_words(text1)
         w2 = get_words(text2)

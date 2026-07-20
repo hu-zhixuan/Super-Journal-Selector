@@ -89,6 +89,11 @@ Output MUST be clean valid JSON only without extra conversational markdown.
         extracted_results: List[Dict[str, Any]] = []
 
         def process_one(p: PaperRecord) -> Optional[Dict[str, Any]]:
+            import time
+            import random
+            # 引入随机小延迟以错开并发峰值，减缓 API 接口 Rate Limit 频率限制压力
+            time.sleep(random.uniform(0.1, 0.8))
+            
             feat = self.extract_paper(p)
             if feat:
                 feat_dict = feat.model_dump()

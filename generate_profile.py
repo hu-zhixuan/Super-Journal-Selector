@@ -37,7 +37,7 @@ class ProfileGenerator:
 ### 【核心重点：拟投稿论文草稿】
 用户提交的待诊断论文文本：
 ```text
-{user_draft_text[:100000]}
+{user_draft_text[:150000]}
 ```
 
 ### 【近年发表的 Top 3 最相似文献特征（由 Layer ③ Cosine Similarity 算法计算得出）】

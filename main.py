@@ -77,6 +77,9 @@ def main():
 
     # 步骤准备
     user_draft_text = read_user_draft(args.user_draft)
+    if user_draft_text:
+        from aggregate import clean_and_truncate_draft
+        user_draft_text = clean_and_truncate_draft(user_draft_text)
 
     # Layer ①: 抓取数据
     logger.info("--- Layer ①: 进入开放文献抓取层 (OpenAlex API) ---")

@@ -15,19 +15,25 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # ==================== Socket 层 DNS 劫持补丁 ====================
-# 让 requests 建立连接时，强行把 fxb.supa.net.cn 映射到 114.80.15.146
+# 让 requests 建立连接时，强行把 fxb.supa.net.cn 映射到指定 IP (默认 114.80.15.146)
 # 但保留真实的域名作为 SNI 和 Host，实现完美握手并绕过 Fake-IP
+DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
+DISABLE_DNS_PATCH = os.getenv("DISABLE_DNS_PATCH", "false").lower() == "true"
+
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
-    if host == "fxb.supa.net.cn":
+    if host == "fxb.supa.net.cn" and not DISABLE_DNS_PATCH and DEFAULT_DIRECT_IP:
         # 强制将连接导向物理 IP，实现分流直连
-        return urllib3_cn._orig_create_connection(("114.80.15.146", port), *args, **kwargs)
+        return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
     return urllib3_cn._orig_create_connection(address, *args, **kwargs)
 
 if not hasattr(urllib3_cn, "_orig_create_connection"):
     urllib3_cn._orig_create_connection = urllib3_cn.create_connection
     urllib3_cn.create_connection = patched_create_connection
-    logger.info("已成功加载 Socket DNS 直连补丁：fxb.supa.net.cn -> 114.80.15.146")
+    if DISABLE_DNS_PATCH:
+        logger.info("已关闭 Socket DNS 直连补丁")
+    elif DEFAULT_DIRECT_IP:
+        logger.info(f"已成功加载 Socket DNS 直连补丁：fxb.supa.net.cn -> {DEFAULT_DIRECT_IP}")
 # ===============================================================
 
 
@@ -105,11 +111,26 @@ class LLMClient:
                 raise ValueError("Anthropic API 返回内容为空")
 
             except Exception as e:
-                logger.warning(f"LLM API 接入调用失败 (尝试 {attempt}/{max_retries}): {str(e)}")
+                # 检查是否为 HTTP 429 速率限制错误并进行友好提示
+                is_rate_limit = False
+                try:
+                    if hasattr(e, "response") and e.response is not None:
+                        if getattr(e.response, "status_code", None) == 429:
+                            is_rate_limit = True
+                except Exception:
+                    pass
+
+                if is_rate_limit:
+                    logger.warning(f"触发 API 频率限制 (HTTP 429) (尝试 {attempt}/{max_retries})，正在执行退避重试...")
+                else:
+                    logger.warning(f"LLM API 接入调用失败 (尝试 {attempt}/{max_retries}): {str(e)}")
+
                 if attempt == max_retries:
                     raise
                 import random
                 sleep_time = (2 ** attempt) + random.uniform(0.5, 2.0)
+                if is_rate_limit:
+                    sleep_time += 3.0  # 针对频率限制额外延长等待时间
                 time.sleep(sleep_time)
         return ""
 
