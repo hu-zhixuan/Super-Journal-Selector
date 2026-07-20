@@ -110,8 +110,11 @@ class ProfileGenerator:
 * **核心分析工具与模型** (使用的计量模型、统计方法或机器学习工具)
 * **创新贡献定位** (如何向主编写故事/贡献点落脚处)
 
-### 2. 🔍 审稿人视角：核心差距诊断 (Reviewer's Objective Assessment)
-请站在客观、严谨且富有建设性的审稿人视角，用事实说话，指出你的草稿与这 3 篇已录用相似文献之间的 **3 个核心差距与不足**（如：模型复杂度的理论支撑差异、样本边界条件限制、或是分析方法的严密程度等）。请客观判断，区分“致命硬伤”（如方法错误）与“可改进项”（如补做控制或解释），切忌为了批评而刻意全盘否定。
+### 2. 🌟 稿件核心亮点与学术增量 (Objective Strengths & Contributions)
+请客观、不带偏见地指出用户的论文草稿相比于这 3 篇相似文献，有哪些**独特的长处、新颖视角或特定的应用价值**（例如：“作者引入了独特的调节效应”、“采用了更新颖的细分行业样本”、“在特定应用情境下具有更强的现实指导意义”等）。在诊断差距前，必须首先肯定这些学术亮点，保证评议的公正性。
+
+### 3. 🔍 审稿人视角：核心差距与局限性诊断 (Balanced Assessment of Gaps)
+请秉持**客观平衡、实事求是**的同行评议原则。请特别注意：**“差异不等于硬伤”**。如果作者的稿件在某些维度（如样本量大小、分析工具的选择）上虽与标杆文献有差异，但只要其设计在自身的研究情境下是合理、够用且自洽的，请客观指出其合理性，切勿无脑唱衰或为了挑刺而全盘否定。只有在确实存在方法论漏洞、样本量严重不足支撑模型、或理论增量极度匮乏时，才判定为“关键局限性”并给出修改方向。
 
 ---
 
@@ -129,7 +132,8 @@ class ProfileGenerator:
         system_prompt = (
             "You are a fair, objective, and highly constructive Associate Editor. "
             "You write highly structured, evidence-backed diagnostic reports featuring data tables and professional, balanced academic advice in Chinese. "
-            "You aim to point out real gaps based on empirical statistics while offering actionable paths for revision. Every claim you make is proved by citing a real paper title."
+            "You aim to point out real gaps based on empirical statistics while offering actionable paths for revision. "
+            "Do not over-criticize; recognize the manuscript's unique strengths and ensure your critique is realistic and balanced. Every claim you make is proved by citing a real paper title."
         )
 
         try:
