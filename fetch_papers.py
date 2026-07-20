@@ -247,8 +247,81 @@ Only return JSON.
                     break
 
             logger.info(f"大样本抓取完成，成功建立有效摘要与概念库条目 {len(papers)} 篇。")
-            return papers, journal_metadata
 
         except Exception as e:
             logger.error(f"获取 OpenAlex 论文大样本列表失败: {str(e)}")
-            raise
+            pass
+
+        # 核心改进：若 OpenAlex 抓取失败或有效样本数过少，自动触发 Europe PMC 备用数据源补齐
+        if len(papers) < 5:
+            logger.warning(f"OpenAlex 抓取到的样本不足 ({len(papers)} 篇)，正在触发 Europe PMC 备用数据源...")
+            try:
+                backup_papers = self.fetch_recent_papers_from_europepmc(source_display_name, max_papers)
+                if backup_papers:
+                    papers = backup_papers
+            except Exception as e_back:
+                logger.error(f"调用备用数据源 Europe PMC 失败: {e_back}")
+
+        if not papers:
+            raise ValueError(f"无法为期刊 '{source_display_name}' 抓取到任何有效的带摘要论文样本")
+
+        return papers, journal_metadata
+
+    def fetch_recent_papers_from_europepmc(self, journal_name: str, max_papers: int = 100) -> List[PaperRecord]:
+        """
+        备用数据源：从 Europe PMC API 抓取近年优质论文数据。
+        当 OpenAlex API 请求失败或返回样本量过少时自动触发此 Fallback。
+        """
+        logger.info(f"正在尝试从备用数据源 Europe PMC 检索期刊 '{journal_name}' 的文献大样本...")
+        url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+        current_year = datetime.now().year
+        min_year = current_year - 3
+        
+        # 构造 Europe PMC 检索查询语句，按被引量降序排列
+        query = f'JOURNAL:"{journal_name}" AND PUB_YEAR:[{min_year} TO {current_year}] AND HAS_ABSTRACT:Y'
+        params = {
+            "query": query,
+            "format": "json",
+            "pageSize": min(max_papers, 100),
+            "resultType": "core",
+            "sort": "CITED desc"
+        }
+        
+        papers: List[PaperRecord] = []
+        try:
+            resp = requests.get(url, params=params, proxies={"http": None, "https": None}, timeout=20)
+            if resp.status_code != 200:
+                logger.warning(f"Europe PMC API 响应错误 (HTTP {resp.status_code})")
+                return []
+                
+            data = resp.json()
+            results = data.get("resultList", {}).get("result", [])
+            
+            for item in results:
+                title = item.get("title", "Untitled")
+                abstract = item.get("abstractText", "")
+                if len(abstract.split()) < 40:
+                    continue
+                
+                # 提取关键词
+                keywords = item.get("keywordList", {}).get("keyword", [])
+                
+                paper = PaperRecord(
+                    id=item.get("id", ""),
+                    doi=item.get("doi", "") or "",
+                    title=title,
+                    abstract=abstract,
+                    publication_year=int(item.get("pubYear", current_year)),
+                    cited_by_count=item.get("citedByCount", 0),
+                    source_title=journal_name,
+                    concepts=keywords
+                )
+                papers.append(paper)
+                if len(papers) >= max_papers:
+                    break
+                    
+            logger.info(f"从 Europe PMC 成功抓取 {len(papers)} 篇论文样本。")
+            return papers
+        except Exception as e:
+            logger.error(f"从 Europe PMC 抓取论文数据异常: {e}")
+            return []

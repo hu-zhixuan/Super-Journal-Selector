@@ -4,6 +4,13 @@ from typing import List, Dict, Any, Optional
 from collections import Counter
 import statistics
 
+# 尝试导入 sentence-transformers 以支持高精度语义向量计算
+try:
+    from sentence_transformers import SentenceTransformer, util
+    HAS_SENTENCE_TRANSFORMERS = True
+except ImportError:
+    HAS_SENTENCE_TRANSFORMERS = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -252,18 +259,52 @@ class ProfileAggregator:
         most_similar_papers = []
         if user_draft_text and user_draft_text.strip():
             similarities = []
-            for f in features_list:
-                # 将标题、摘要、理论构念、分析工具与 OpenAlex 概念关键词融合，构建高维度语义向量文本
-                semantic_elements = [
-                    f.get("title", ""),
-                    f.get("abstract", ""),
-                    " ".join(f.get("theoretical_frameworks", [])),
-                    " ".join(f.get("analytical_tools", [])),
-                    " ".join(f.get("concepts", [])),
-                ]
-                paper_content = " ".join([elem for elem in semantic_elements if elem]).strip()
-                sim = ProfileAggregator.calculate_cosine_similarity(user_draft_text, paper_content)
-                similarities.append((sim, f))
+            use_semantic = HAS_SENTENCE_TRANSFORMERS
+            
+            if use_semantic:
+                try:
+                    logger.info("检测到 sentence-transformers，正在使用 all-MiniLM-L6-v2 进行高精度语义向量化对标...")
+                    # 仅在需要时延迟初始化模型，节省开销
+                    model = SentenceTransformer('all-MiniLM-L6-v2')
+                    
+                    paper_contents = []
+                    papers_mapping = []
+                    for f in features_list:
+                        semantic_elements = [
+                            f.get("title", ""),
+                            f.get("abstract", ""),
+                            " ".join(f.get("theoretical_frameworks", [])),
+                            " ".join(f.get("analytical_tools", [])),
+                            " ".join(f.get("concepts", [])),
+                        ]
+                        content = " ".join([elem for elem in semantic_elements if elem]).strip()
+                        paper_contents.append(content)
+                        papers_mapping.append(f)
+                    
+                    # 提取语义编码并计算相似度
+                    draft_emb = model.encode(user_draft_text, convert_to_tensor=True)
+                    papers_embs = model.encode(paper_contents, convert_to_tensor=True)
+                    cos_scores = util.cos_sim(draft_emb, papers_embs)[0]
+                    
+                    for idx, score in enumerate(cos_scores):
+                        similarities.append((float(score), papers_mapping[idx]))
+                except Exception as e_sem:
+                    logger.warning(f"使用 sentence-transformers 进行语义对标失败，将降级为词频余弦对标: {e_sem}")
+                    use_semantic = False
+            
+            if not use_semantic:
+                for f in features_list:
+                    # 将标题、摘要、理论构念、分析工具与 OpenAlex 概念关键词融合，构建高维度语义向量文本
+                    semantic_elements = [
+                        f.get("title", ""),
+                        f.get("abstract", ""),
+                        " ".join(f.get("theoretical_frameworks", [])),
+                        " ".join(f.get("analytical_tools", [])),
+                        " ".join(f.get("concepts", [])),
+                    ]
+                    paper_content = " ".join([elem for elem in semantic_elements if elem]).strip()
+                    sim = ProfileAggregator.calculate_cosine_similarity(user_draft_text, paper_content)
+                    similarities.append((sim, f))
             
             # 按相似度降序排列
             similarities.sort(key=lambda x: x[0], reverse=True)

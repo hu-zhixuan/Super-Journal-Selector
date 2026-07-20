@@ -58,20 +58,38 @@ def parse_docx(file_path: str) -> str:
 
 def parse_pdf(file_path: str) -> str:
     """
-    解析 PDF 文档，读取完整内容进行高精度对标与诊断
+    解析 PDF 文档，读取完整内容进行高精度对标与诊断。
+    优先使用 PyMuPDF (fitz) 以获得更精准的学术排版与公式格式保留，若未安装则降级使用 pypdf。
     """
     try:
-        reader = pypdf.PdfReader(file_path)
+        import fitz  # PyMuPDF
+        doc = fitz.open(file_path)
         text_list = []
-        for page in reader.pages:
-            page_text = page.extract_text()
+        for page in doc:
+            # 使用 layout 模式可以更好地保持学术排版、公式和多栏文字顺序
+            page_text = page.get_text("layout")
             if page_text:
                 text_list.append(page_text)
         full_text = "\n".join(text_list)
-        logger.info(f"成功解析 PDF，读取完整 {len(reader.pages)} 页，共 {len(full_text)} 字。")
+        logger.info(f"成功使用 PyMuPDF 解析 PDF，共 {len(doc)} 页，共 {len(full_text)} 字。")
         return full_text
+    except ImportError:
+        logger.info("未检测到 PyMuPDF (fitz)，将降级使用 pypdf 进行解析。")
+        try:
+            reader = pypdf.PdfReader(file_path)
+            text_list = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text_list.append(page_text)
+            full_text = "\n".join(text_list)
+            logger.info(f"使用 pypdf 解析 PDF 成功，共 {len(reader.pages)} 页，共 {len(full_text)} 字。")
+            return full_text
+        except Exception as e_pypdf:
+            logger.error(f"pypdf 解析 PDF 失败: {e_pypdf}")
+            return f"[PDF 解析失败]: {str(e_pypdf)}"
     except Exception as e:
-        logger.error(f"解析 PDF 失败: {e}")
+        logger.error(f"PyMuPDF 解析 PDF 失败: {e}")
         return f"[PDF 解析失败]: {str(e)}"
 
 
