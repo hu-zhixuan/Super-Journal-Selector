@@ -176,7 +176,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
     """
     journal_name = journal_name.strip() if journal_name else ""
     if not journal_name:
-        yield "❌ 错误：请先在上方输入期刊关键词并选择一个目标期刊！", "", ""
+        yield "❌ 错误：请先在上方输入期刊关键词并选择一个目标期刊！", ""
         return
 
     # 优先解析上传的文档文件
@@ -184,21 +184,21 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
     if file_obj is not None:
         file_path = file_obj.name
         ext = os.path.splitext(file_path)[1].lower()
-        yield f"⏳ 正在解析上传的 {ext} 完整学术文档，即将开始高精度对标与诊断...", "", ""
+        yield f"⏳ 正在解析上传的 {ext} 完整学术文档，即将开始高精度对标与诊断...", ""
         
         if ext == ".docx":
             final_draft_text = parse_docx(file_path)
         elif ext == ".pdf":
             final_draft_text = parse_pdf(file_path)
         else:
-            yield f"❌ 错误：不支持的文档格式 {ext}，仅支持 .docx 和 .pdf 格式！", "", ""
+            yield f"❌ 错误：不支持的文档格式 {ext}，仅支持 .docx 和 .pdf 格式！", ""
             return
     else:
         final_draft_text = user_draft.strip() if user_draft else ""
 
     try:
         # Layer ①: 抓取数据
-        yield "⏳ [1/4] 正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...", "", ""
+        yield "⏳ [1/4] 正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...", ""
         fetcher = OpenAlexFetcher()
         papers, journal_metadata = fetcher.fetch_recent_papers(
             journal_name=journal_name,
@@ -206,29 +206,29 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             max_papers=int(max_papers),
         )
         if not papers:
-            yield f"❌ 错误：未在 OpenAlex 中检索到期刊 '{journal_name}' 或近几年该刊无有效发文。", "", ""
+            yield f"❌ 错误：未在 OpenAlex 中检索到期刊 '{journal_name}' 或近几年该刊无有效发文。", ""
             return
 
         # Layer ②: LLM 结构化特征提取
         total_papers = len(papers)
-        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=10)...", "", ""
+        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=10)...", ""
         
         extractor = FeatureExtractor()
         extracted_features = extractor.extract_batch(papers, max_workers=10)
                 
         if not extracted_features:
-            yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", "", ""
+            yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""
             return
 
         draft_text = final_draft_text.strip() if final_draft_text and final_draft_text.strip() else None
 
         # Layer ③: 纯代码统计聚合
-        yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布并执行文献相似度诊断...", "", ""
+        yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布并执行文献相似度诊断...", ""
         aggregator = ProfileAggregator()
         aggregated_stats = aggregator.aggregate(extracted_features, user_draft_text=draft_text)
 
         # Layer ④: LLM 生成偏好画像与策略报告
-        yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", "", ""
+        yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", ""
         generator = ProfileGenerator()
         
         report_markdown = generator.generate_report(
@@ -245,11 +245,11 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             f.write(report_markdown)
 
         success_msg = f"🎉 画像报告生成成功！已保存至本地: {output_path}"
-        yield success_msg, report_markdown, report_markdown
+        yield success_msg, report_markdown
 
     except Exception as e:
         logger.error(f"网页端运行异常: {str(e)}")
-        yield f"❌ 运行失败，错误原因: {str(e)}", "", ""
+        yield f"❌ 运行失败，错误原因: {str(e)}", ""
 
 
 # ==================== GRADIO 网页界面布局 ====================
@@ -340,9 +340,6 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
         """
     )
 
-    # 存储生成的报告状态，供 Chatbot 调用
-    report_state = gr.State(value="")
-
     with gr.Tabs():
         with gr.Tab("📊 选稿画像与循证诊断"):
             with gr.Row():
@@ -431,18 +428,18 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
     submit_btn.click(
         fn=run_pipeline,
         inputs=[journal_input, years_input, max_papers_input, draft_input, file_input],
-        outputs=[status_output, report_output, report_state]
+        outputs=[status_output, report_output]
     )
 
-    # 聊天消息发送绑定
+    # 聊天消息发送绑定 (直接绑定 report_output 作为 report_text 输入，解决 gr.State 缓存问题)
     send_btn.click(
         fn=chat_with_reviewer,
-        inputs=[msg_input, chatbot, report_state],
+        inputs=[msg_input, chatbot, report_output],
         outputs=[chatbot, msg_input]
     )
     msg_input.submit(
         fn=chat_with_reviewer,
-        inputs=[msg_input, chatbot, report_state],
+        inputs=[msg_input, chatbot, report_output],
         outputs=[chatbot, msg_input]
     )
 
