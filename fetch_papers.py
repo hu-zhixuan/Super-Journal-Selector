@@ -136,8 +136,8 @@ class OpenAlexFetcher:
         
         # 匹配本地分区字典
         local_partition = {
-            "jcr_zone": "N/A (非高频对标刊物)",
-            "cas_zone": "N/A (非高频对标刊物)",
+            "jcr_zone": "未知",
+            "cas_zone": "未知",
             "cas_sub_categories": "N/A",
             "is_top": "未知"
         }
@@ -156,6 +156,32 @@ class OpenAlexFetcher:
                         local_partition = v
                         match_found = True
                         break
+                
+                # 如果本地没有匹配，调用大模型智能推测该著名期刊的分区以避免显示 N/A
+                if not match_found:
+                    try:
+                        from llm_client import LLMClient
+                        llm = LLMClient()
+                        prompt = f"""
+Given the academic journal name: "{source_display_name}" (Estimated Impact Factor: {summary_stats.get("2yr_mean_citedness", "N/A")}), please estimate its standard academic rankings.
+Output strictly in JSON format matching this schema:
+{{
+    "jcr_zone": "JCR zone (e.g. Q1, Q2, Q3, Q4)",
+    "cas_zone": "Chinese Academy of Sciences partition zone (e.g. 1区, 2区, 3区, 4区)",
+    "cas_sub_categories": "Sub-disciplines/Categories in Chinese (e.g. 物理:多学科, 计算机:信息系统)",
+    "is_top": "Whether it is a CAS Top Journal (e.g. 是 (Top 期刊), 否)"
+}}
+Only return JSON.
+"""
+                        resp_json = llm.call_json(prompt=prompt)
+                        local_partition = {
+                            "jcr_zone": resp_json.get("jcr_zone", "未知"),
+                            "cas_zone": resp_json.get("cas_zone", "未知"),
+                            "cas_sub_categories": resp_json.get("cas_sub_categories", "未知"),
+                            "is_top": resp_json.get("is_top", "未知")
+                        }
+                    except Exception as e_llm:
+                        logger.warning(f"智能大模型估算分区出错: {e_llm}")
         except Exception as e:
             logger.warning(f"加载本地分区数据字典异常: {e}")
 

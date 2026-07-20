@@ -5,6 +5,12 @@
     "cas_sub_categories": "心理学 (Psychology) / 计算机:信息系统 (Computer Science, Information Systems)",
     "is_top": "是 (Top 期刊)"
   },
+  "computers in human behavior reports": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "心理学 (Psychology) / 计算机:信息系统 (Computer Science, Information Systems)",
+    "is_top": "是 (Top 期刊)"
+  },
   "strategic management journal": {
     "jcr_zone": "Q1",
     "cas_zone": "1区",
@@ -18,6 +24,12 @@
     "is_top": "是 (Top 期刊)"
   },
   "physica a": {
+    "jcr_zone": "Q2",
+    "cas_zone": "3区",
+    "cas_sub_categories": "物理:多学科 (Physics, Multidisciplinary)",
+    "is_top": "否"
+  },
+  "physica a: statistical mechanics and its applications": {
     "jcr_zone": "Q2",
     "cas_zone": "3区",
     "cas_sub_categories": "物理:多学科 (Physics, Multidisciplinary)",
@@ -58,5 +70,59 @@
     "cas_zone": "1区",
     "cas_sub_categories": "综合性期刊 (Multidisciplinary Sciences)",
     "is_top": "是 (Top 期刊)"
+  },
+  "physical review letters": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "物理:多学科 (Physics, Multidisciplinary)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "physical review a": {
+    "jcr_zone": "Q2",
+    "cas_zone": "2区",
+    "cas_sub_categories": "物理:原子、分子和光学物理 (Physics, Atomic, Molecular & Chemical)",
+    "is_top": "否"
+  },
+  "physical review b": {
+    "jcr_zone": "Q1",
+    "cas_zone": "2区",
+    "cas_sub_categories": "物理:凝聚态物理 (Physics, Condensed Matter)",
+    "is_top": "否"
+  },
+  "physical review d": {
+    "jcr_zone": "Q1",
+    "cas_zone": "2区",
+    "cas_sub_categories": "物理:粒子、场、引力与宇宙学 (Physics, Particles, Fields, Gravitation)",
+    "is_top": "否"
+  },
+  "physical review x": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "物理:多学科 (Physics, Multidisciplinary)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "journal of the american chemical society": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "化学:多学科 (Chemistry, Multidisciplinary)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "cell": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "生物:细胞生物学 (Cell Biology)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "the lancet": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "医学:内科 (Medicine, General & Internal)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "new england journal of medicine": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "医学:内科 (Medicine, General & Internal)",
+    "is_top": "获得 (Top 期刊)"
   }
 }
