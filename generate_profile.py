@@ -88,6 +88,7 @@ class ProfileGenerator:
 ### 2. 理论框架、工具与样本门槛指标表 (Theories, Tools & Sample Thresholds)
 * 用表格形式呈现：排名前列的核心理论框架（Top Theories）、常用分析工具链（Top Tools）以及定量分析的样本规模区间（Median/Min/Max）。
 * **### 📌 指标解读批注**：用极简短的 2 行字说明样本与工具的隐形门槛。
+  特别注意：如果该刊为物理学或自然科学期刊且统计出的样本量中位数（Median Sample）极小（如 1 或 2），说明此非社会科学人头调查，而是实验器件样品、单晶体系或模型层数。请务必在批注中以高级审稿人身份明确对此范式差异做出科学合理解释，避免误导作者。
 
 ### 3. 开源科学实践与统计汇报规范底线 (Open Science & Statistical Norms Audit)
 * 根据 `stats_json` 中的 `open_science_stats` 用表格呈现数据开源（Open Data）与代码开源（Open Code）等实践在近年文章中的实际占比，判断该刊是否属于开源友好型期刊。

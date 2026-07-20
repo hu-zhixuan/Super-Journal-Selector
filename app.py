@@ -265,10 +265,22 @@ theme = gr.themes.Soft(
 
 def chat_with_reviewer(message: str, history: list, report_text: str):
     """
-    与模拟主编(AE)/审稿人在线对线辩论的后端逻辑
+    与模拟主编(AE)/审稿人在线对线辩论的后端逻辑。
+    兼容 Gradio 新版 dict/ChatMessage 格式与旧版 tuple 格式。
     """
+    # 智能探测当前 Gradio 历史的格式
+    is_dict_format = True
+    if history and isinstance(history[0], (list, tuple)):
+        is_dict_format = False
+
+    # 错误消息处理
+    err_reply = "⚠️ 【系统提示】请先在“📊 选稿画像与循证诊断”标签页中成功生成一份期刊诊断报告，然后再在此处与模拟审稿人在线对线。"
     if not report_text or not report_text.strip() or "报告生成后将在此处" in report_text:
-        history.append((message, "⚠️ 【系统提示】请先在“📊 选稿画像与循证诊断”标签页中成功生成一份期刊诊断报告，然后再在此处与模拟审稿人在线对线。"))
+        if is_dict_format:
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": err_reply})
+        else:
+            history.append((message, err_reply))
         return history, ""
 
     from llm_client import LLMClient
@@ -285,8 +297,14 @@ def chat_with_reviewer(message: str, history: list, report_text: str):
 
     # 格式化对话历史
     conversation_history = ""
-    for user_msg, bot_msg in history:
-        conversation_history += f"Author: {user_msg}\nAE/Reviewer: {bot_msg}\n"
+    if is_dict_format:
+        for msg in history:
+            role = "Author" if msg.get("role") == "user" else "AE/Reviewer"
+            content = msg.get("content", "")
+            conversation_history += f"{role}: {content}\n"
+    else:
+        for user_msg, bot_msg in history:
+            conversation_history += f"Author: {user_msg}\nAE/Reviewer: {bot_msg}\n"
 
     prompt = f"""
 Below is the history of your discussion with the author, followed by the author's new message. Respond directly, using your professional Associate Editor identity.
@@ -297,10 +315,19 @@ AE/Reviewer:
 """
     try:
         reply = llm.call(prompt=prompt, system_prompt=system_prompt, temperature=0.3)
-        history.append((message, reply))
+        if is_dict_format:
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": reply})
+        else:
+            history.append((message, reply))
     except Exception as e:
         logger.error(f"模拟审稿人对话异常: {e}")
-        history.append((message, f"❌ 审稿人开小差了，回复失败，原因为: {str(e)}"))
+        fail_msg = f"❌ 审稿人开小差了，回复失败，原因为: {str(e)}"
+        if is_dict_format:
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": fail_msg})
+        else:
+            history.append((message, fail_msg))
 
     return history, ""
 
