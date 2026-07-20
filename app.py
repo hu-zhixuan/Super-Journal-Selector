@@ -211,10 +211,10 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
 
         # Layer ②: LLM 结构化特征提取
         total_papers = len(papers)
-        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=10)...", ""
+        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=3)...", ""
         
         extractor = FeatureExtractor()
-        extracted_features = extractor.extract_batch(papers, max_workers=10)
+        extracted_features = extractor.extract_batch(papers, max_workers=3)
                 
         if not extracted_features:
             yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""

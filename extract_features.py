@@ -81,7 +81,7 @@ Output MUST be clean valid JSON only without extra conversational markdown.
             logger.warning(f"论文 [{paper.title[:30]}...] 特征抽取出现异常: {str(e)}")
             return None
 
-    def extract_batch(self, papers: List[PaperRecord], max_workers: int = 10) -> List[Dict[str, Any]]:
+    def extract_batch(self, papers: List[PaperRecord], max_workers: int = 3) -> List[Dict[str, Any]]:
         """
         利用多线程池并发批量解析大样本论文列表，实现百篇级高频特征极速结构化抽取
         """

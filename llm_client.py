@@ -91,7 +91,7 @@ class LLMClient:
                     headers=headers,
                     json=payload,
                     proxies=direct_proxies,
-                    timeout=30
+                    timeout=60
                 )
                 response.raise_for_status()
                 
@@ -108,7 +108,9 @@ class LLMClient:
                 logger.warning(f"LLM API 接入调用失败 (尝试 {attempt}/{max_retries}): {str(e)}")
                 if attempt == max_retries:
                     raise
-                time.sleep(2 ** attempt)
+                import random
+                sleep_time = (2 ** attempt) + random.uniform(0.5, 2.0)
+                time.sleep(sleep_time)
         return ""
 
     def call_json(
