@@ -1,0 +1,62 @@
+{
+  "computers in human behavior": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "心理学 (Psychology) / 计算机:信息系统 (Computer Science, Information Systems)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "strategic management journal": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "管理学 (Business/Management)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "mis quarterly": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "管理学:信息系统 (Information Systems)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "physica a": {
+    "jcr_zone": "Q2",
+    "cas_zone": "3区",
+    "cas_sub_categories": "物理:多学科 (Physics, Multidisciplinary)",
+    "is_top": "否"
+  },
+  "information systems research": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "管理学:信息系统 (Information Systems)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "academy of management journal": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "管理学 (Management)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "journal of finance": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "经济学:金融 (Business, Finance)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "tourism management": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "管理学:旅游管理 (Hospitality, Leisure, Sport & Tourism)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "nature": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "综合性期刊 (Multidisciplinary Sciences)",
+    "is_top": "是 (Top 期刊)"
+  },
+  "science": {
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "cas_sub_categories": "综合性期刊 (Multidisciplinary Sciences)",
+    "is_top": "是 (Top 期刊)"
+  }
+}

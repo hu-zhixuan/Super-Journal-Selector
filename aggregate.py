@@ -119,6 +119,59 @@ class ProfileAggregator:
                     all_tools.append(cleaned_tool)
         top_tools = Counter(all_tools).most_common(12)
 
+        # 5b. 方法论审计：开源科学实践聚合统计 (Open Science Practices)
+        open_science_counter = Counter()
+        for f in features_list:
+            practices = f.get("open_science_practices", [])
+            # 处理 list[str]
+            if not practices:
+                open_science_counter["None"] += 1
+            else:
+                for p in practices:
+                    cleaned_p = p.strip()
+                    # 规范化命名，如 Open Data, Open Code, Preregistration
+                    if not cleaned_p or cleaned_p.lower() == "none":
+                        open_science_counter["None"] += 1
+                    else:
+                        # 转成首字母大写便于统一聚合显示
+                        title_p = cleaned_p.title()
+                        if "Data" in title_p:
+                            title_p = "Open Data"
+                        elif "Code" in title_p:
+                            title_p = "Open Code"
+                        elif "Pre" in title_p or "Reg" in title_p:
+                            title_p = "Preregistration"
+                        open_science_counter[title_p] += 1
+        
+        # 计算百分比
+        open_science_stats = {
+            p_name: {
+                "count": cnt,
+                "percentage": round((cnt / total_count) * 100, 1)
+            }
+            for p_name, cnt in open_science_counter.most_common()
+        }
+
+        # 5c. 方法论审计：统计汇报风格分布统计 (Statistical Reporting Style)
+        reporting_styles = []
+        for f in features_list:
+            style = f.get("statistical_reporting_style", "None")
+            if style and style.strip().lower() != "none":
+                style_clean = style.strip()
+                # 简单清洗聚合
+                if "p-value" in style_clean.lower() or "p value" in style_clean.lower():
+                    reporting_styles.append("Significance Testing (P-values)")
+                elif "bootstrap" in style_clean.lower() or "mediation" in style_clean.lower():
+                    reporting_styles.append("Mediation & Bootstrapping CIs")
+                elif "bayesian" in style_clean.lower():
+                    reporting_styles.append("Bayesian Analysis")
+                else:
+                    reporting_styles.append(style_clean[:40] + ("..." if len(style_clean) > 40 else ""))
+            else:
+                reporting_styles.append("None / Qualitative Description")
+        
+        top_reporting_styles = Counter(reporting_styles).most_common(5)
+
         # 6. 挑选中近期被引次最高、具代表性的论文创新点金句作为示范 (Top 5)
         sorted_by_citations = sorted(
             features_list, key=lambda x: x.get("cited_by_count", 0), reverse=True
@@ -173,6 +226,8 @@ class ProfileAggregator:
             "sample_size_stats": sample_size_stats,
             "top_theories": [{"name": name, "count": cnt} for name, cnt in top_theories],
             "top_tools": [{"name": name, "count": cnt} for name, cnt in top_tools],
+            "open_science_stats": open_science_stats,
+            "top_reporting_styles": [{"style": style, "count": cnt} for style, cnt in top_reporting_styles],
             "representative_novelties": representative_novelties,
             "most_similar_papers": most_similar_papers,
         }

@@ -33,6 +33,12 @@ class ExtractedFeatures(BaseModel):
     novelty_highlight: str = Field(
         description="一句话总结该论文能被目标刊物接收的关键创新点（如：首次将双重差分模型应用于异质性干预机制，或者采用了极为独特的跨国微观匹配数据）"
     )
+    open_science_practices: List[str] = Field(
+        description="是否提及开源实践（如数据开源、代码开源、材料开源、研究预注册，英文简写表示，如 ['Open Data', 'Open Code', 'Preregistration']，若无提及则填 ['None']）"
+    )
+    statistical_reporting_style: str = Field(
+        description="文章汇报数据时的统计倾向与风格描述（如 'Reported P-values and confidence intervals', 'Reported bootstrapped confidence intervals for mediation', 'None' 等）"
+    )
 
 
 class FeatureExtractor:
@@ -60,6 +66,8 @@ Required JSON Schema Fields:
 4. `theoretical_frameworks` (list of strings): Up to 3 main theoretical lenses or core conceptual constructs.
 5. `analytical_tools` (list of strings): Up to 4 statistical, econometric, computational tools or models used (e.g., OLS, DID, SEM, LLM, Regression).
 6. `novelty_highlight` (string): A concise 1-sentence analytical note on what makes this research design or contribution standout for publication.
+7. `open_science_practices` (list of strings): List of open science practices mentioned or implied (e.g., ["Open Data"], ["Open Code"], ["Preregistration"]). Use ["None"] if not mentioned.
+8. `statistical_reporting_style` (string): Summary of how statistics or hypotheses are tested and reported (e.g., "Reported P-values and mediation confidence intervals", "Reported Bayesian factor analysis", "None" if qualitative).
 
 Output MUST be clean valid JSON only without extra conversational markdown.
 """

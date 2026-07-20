@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import logging
 from typing import List, Dict, Any, Optional, Tuple
@@ -133,6 +134,31 @@ class OpenAlexFetcher:
         summary_stats = source_info.get("summary_stats", {})
         x_concepts = source_info.get("x_concepts", [])
         
+        # 匹配本地分区字典
+        local_partition = {
+            "jcr_zone": "N/A (非高频对标刊物)",
+            "cas_zone": "N/A (非高频对标刊物)",
+            "cas_sub_categories": "N/A",
+            "is_top": "未知"
+        }
+        try:
+            partitions_path = os.path.join(os.path.dirname(__file__), "journal_partitions.json")
+            if os.path.exists(partitions_path):
+                with open(partitions_path, "r", encoding="utf-8") as f:
+                    db = json.load(f)
+                
+                # 进行模糊/不区分大小写的名字匹配
+                q_clean = journal_name.lower().strip()
+                match_found = False
+                # 优先匹配本地key
+                for k, v in db.items():
+                    if (k in q_clean) or (q_clean in k) or (source_display_name.lower() in k) or (k in source_display_name.lower()):
+                        local_partition = v
+                        match_found = True
+                        break
+        except Exception as e:
+            logger.warning(f"加载本地分区数据字典异常: {e}")
+
         journal_metadata = {
             "display_name": source_display_name,
             "issn": source_info.get("issn", ["Unknown"])[0] if source_info.get("issn") else "Unknown",
@@ -140,7 +166,11 @@ class OpenAlexFetcher:
             "estimated_impact_factor": summary_stats.get("2yr_mean_citedness", "N/A"),
             "works_count": source_info.get("works_count", "N/A"),
             "cited_by_count": source_info.get("cited_by_count", "N/A"),
-            "categories": [c.get("name") for c in x_concepts[:6] if c.get("name")]
+            "categories": [c.get("name") for c in x_concepts[:6] if c.get("name")],
+            "jcr_zone": local_partition.get("jcr_zone"),
+            "cas_zone": local_partition.get("cas_zone"),
+            "cas_sub_categories": local_partition.get("cas_sub_categories"),
+            "is_top": local_partition.get("is_top")
         }
 
         current_year = datetime.now().year

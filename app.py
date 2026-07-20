@@ -176,7 +176,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
     """
     journal_name = journal_name.strip() if journal_name else ""
     if not journal_name:
-        yield "❌ 错误：请先在上方输入期刊关键词并选择一个目标期刊！", ""
+        yield "❌ 错误：请先在上方输入期刊关键词并选择一个目标期刊！", "", ""
         return
 
     # 优先解析上传的文档文件
@@ -184,21 +184,21 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
     if file_obj is not None:
         file_path = file_obj.name
         ext = os.path.splitext(file_path)[1].lower()
-        yield f"⏳ 正在解析上传的 {ext} 完整学术文档，即将开始高精度对标与诊断...", ""
+        yield f"⏳ 正在解析上传的 {ext} 完整学术文档，即将开始高精度对标与诊断...", "", ""
         
         if ext == ".docx":
             final_draft_text = parse_docx(file_path)
         elif ext == ".pdf":
             final_draft_text = parse_pdf(file_path)
         else:
-            yield f"❌ 错误：不支持的文档格式 {ext}，仅支持 .docx 和 .pdf 格式！", ""
+            yield f"❌ 错误：不支持的文档格式 {ext}，仅支持 .docx 和 .pdf 格式！", "", ""
             return
     else:
         final_draft_text = user_draft.strip() if user_draft else ""
 
     try:
         # Layer ①: 抓取数据
-        yield "⏳ [1/4] 正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...", ""
+        yield "⏳ [1/4] 正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...", "", ""
         fetcher = OpenAlexFetcher()
         papers, journal_metadata = fetcher.fetch_recent_papers(
             journal_name=journal_name,
@@ -206,29 +206,29 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             max_papers=int(max_papers),
         )
         if not papers:
-            yield f"❌ 错误：未在 OpenAlex 中检索到期刊 '{journal_name}' 或近几年该刊无有效发文。", ""
+            yield f"❌ 错误：未在 OpenAlex 中检索到期刊 '{journal_name}' 或近几年该刊无有效发文。", "", ""
             return
 
         # Layer ②: LLM 结构化特征提取
         total_papers = len(papers)
-        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=10)...", ""
+        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=10)...", "", ""
         
         extractor = FeatureExtractor()
         extracted_features = extractor.extract_batch(papers, max_workers=10)
                 
         if not extracted_features:
-            yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""
+            yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", "", ""
             return
 
         draft_text = final_draft_text.strip() if final_draft_text and final_draft_text.strip() else None
 
         # Layer ③: 纯代码统计聚合
-        yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布并执行文献相似度诊断...", ""
+        yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布并执行文献相似度诊断...", "", ""
         aggregator = ProfileAggregator()
         aggregated_stats = aggregator.aggregate(extracted_features, user_draft_text=draft_text)
 
         # Layer ④: LLM 生成偏好画像与策略报告
-        yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", ""
+        yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", "", ""
         generator = ProfileGenerator()
         
         report_markdown = generator.generate_report(
@@ -245,11 +245,11 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             f.write(report_markdown)
 
         success_msg = f"🎉 画像报告生成成功！已保存至本地: {output_path}"
-        yield success_msg, report_markdown
+        yield success_msg, report_markdown, report_markdown
 
     except Exception as e:
         logger.error(f"网页端运行异常: {str(e)}")
-        yield f"❌ 运行失败，错误原因: {str(e)}", ""
+        yield f"❌ 运行失败，错误原因: {str(e)}", "", ""
 
 
 # ==================== GRADIO 网页界面布局 ====================
@@ -262,6 +262,49 @@ theme = gr.themes.Soft(
     button_primary_background_fill_hover="*primary_600",
 )
 
+
+def chat_with_reviewer(message: str, history: list, report_text: str):
+    """
+    与模拟主编(AE)/审稿人在线对线辩论的后端逻辑
+    """
+    if not report_text or not report_text.strip() or "报告生成后将在此处" in report_text:
+        history.append((message, "⚠️ 【系统提示】请先在“📊 选稿画像与循证诊断”标签页中成功生成一份期刊诊断报告，然后再在此处与模拟审稿人在线对线。"))
+        return history, ""
+
+    from llm_client import LLMClient
+    llm = LLMClient()
+
+    system_prompt = (
+        "You are an Associate Editor and senior Peer Reviewer for the selected academic journal. "
+        "You have just generated the diagnostic report (context provided below). "
+        "The author (user) is chatting with you to defend their manuscript, clarify your points, or suggest revisions. "
+        "Be professional, direct, academic, strict, but constructively critical. Avoid generic AI fluff. "
+        "Always respond in professional Chinese. ground your arguments in the report context and published papers.\n\n"
+        f"--- Diagnostic Report Context ---\n{report_text}\n--- End Context ---"
+    )
+
+    # 格式化对话历史
+    conversation_history = ""
+    for user_msg, bot_msg in history:
+        conversation_history += f"Author: {user_msg}\nAE/Reviewer: {bot_msg}\n"
+
+    prompt = f"""
+Below is the history of your discussion with the author, followed by the author's new message. Respond directly, using your professional Associate Editor identity.
+
+{conversation_history}
+Author (New Message): {message}
+AE/Reviewer:
+"""
+    try:
+        reply = llm.call(prompt=prompt, system_prompt=system_prompt, temperature=0.3)
+        history.append((message, reply))
+    except Exception as e:
+        logger.error(f"模拟审稿人对话异常: {e}")
+        history.append((message, f"❌ 审稿人开小差了，回复失败，原因为: {str(e)}"))
+
+    return history, ""
+
+
 with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
     gr.Markdown(
         """
@@ -269,63 +312,86 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
         **打通成果撰写与投稿优化全链路的“学术品味诊断与策略改造器”**
         """
     )
-    
-    with gr.Row():
-        # 左侧输入控制区
-        with gr.Column(scale=2):
-            gr.Markdown("### ⚙️ 投稿对标参数配置")
-            
-            search_input = gr.Textbox(
-                label="🔍 输入期刊关键词进行联想（输入3个字母以上自动检索）",
-                placeholder="例如: computers 或 strategic",
-                value=""
-            )
-            
-            journal_input = gr.Dropdown(
-                label="🎯 选择目标期刊全称 (从下方匹配的候选列表中选择)",
-                choices=["Computers in Human Behavior"],
-                value="Computers in Human Behavior",
-                allow_custom_value=True,
-                interactive=True
-            )
-            
+
+    # 存储生成的报告状态，供 Chatbot 调用
+    report_state = gr.State(value="")
+
+    with gr.Tabs():
+        with gr.Tab("📊 选稿画像与循证诊断"):
             with gr.Row():
-                years_input = gr.Slider(
-                    minimum=1, maximum=5, value=3, step=1,
-                    label="数据回溯年份"
-                )
-                max_papers_input = gr.Slider(
-                    minimum=20, maximum=200, value=100, step=10,
-                    label="大样本并发采样文献数 (100+高特异性指向)"
-                )
-                
-            # 输入方式卡片：提供粘贴文本和文件上传两种选择
-            with gr.Tab("📝 选项 A：手动粘贴摘要/草稿"):
-                draft_input = gr.Textbox(
-                    label="粘贴拟投稿论文的 Title/Abstract/大纲",
-                    placeholder="在此粘贴，系统将给出字面级的手术重构方案...",
-                    lines=8
-                )
-                
-            with gr.Tab("📁 选项 B：上传草稿文件 (支持整篇全量对标)"):
-                file_input = gr.File(
-                    label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
-                    file_types=[".docx", ".pdf"]
-                )
-            
-            submit_btn = gr.Button("🚀 一键生成期刊选稿画像", variant="primary")
-            
-        # 右侧报告输出区
-        with gr.Column(scale=3):
-            gr.Markdown("### 📝 期刊选稿画像与手术修稿报告")
-            status_output = gr.Textbox(
-                label="系统运行状态",
-                value="就绪。等待输入并点击生成...",
-                interactive=False
+                # 左侧输入控制区
+                with gr.Column(scale=2):
+                    gr.Markdown("### ⚙️ 投稿对标参数配置")
+                    
+                    search_input = gr.Textbox(
+                        label="🔍 输入期刊关键词进行联想（输入3个字母以上自动检索）",
+                        placeholder="例如: computers 或 strategic",
+                        value=""
+                    )
+                    
+                    journal_input = gr.Dropdown(
+                        label="🎯 选择目标期刊全称 (从下方匹配的候选列表中选择)",
+                        choices=["Computers in Human Behavior"],
+                        value="Computers in Human Behavior",
+                        allow_custom_value=True,
+                        interactive=True
+                    )
+                    
+                    with gr.Row():
+                        years_input = gr.Slider(
+                            minimum=1, maximum=5, value=3, step=1,
+                            label="数据回溯年份"
+                        )
+                        max_papers_input = gr.Slider(
+                            minimum=20, maximum=200, value=100, step=10,
+                            label="大样本并发采样文献数 (100+高特异性指向)"
+                        )
+                        
+                    # 输入方式卡片：提供粘贴文本和文件上传两种选择
+                    with gr.Tab("📝 选项 A：手动粘贴摘要/草稿"):
+                        draft_input = gr.Textbox(
+                            label="粘贴拟投稿论文的 Title/Abstract/大纲",
+                            placeholder="在此粘贴，系统将给出字面级的手术重构方案...",
+                            lines=8
+                        )
+                        
+                    with gr.Tab("📁 选项 B：上传草稿文件 (支持整篇全量对标)"):
+                        file_input = gr.File(
+                            label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
+                            file_types=[".docx", ".pdf"]
+                        )
+                    
+                    submit_btn = gr.Button("🚀 一键生成期刊选稿画像与对标报告", variant="primary")
+                    
+                # 右侧报告输出区
+                with gr.Column(scale=3):
+                    gr.Markdown("### 📝 期刊选稿画像与手术修稿报告")
+                    status_output = gr.Textbox(
+                        label="系统运行状态",
+                        value="就绪。等待输入并点击生成...",
+                        interactive=False
+                    )
+                    report_output = gr.Markdown(
+                        value="*报告生成后将在此处以精美 Markdown 格式自动渲染展示。*"
+                    )
+
+        with gr.Tab("💬 模拟审稿人在线对答"):
+            gr.Markdown(
+                """
+                ### 💬 模拟 AE/审稿人对话舱 (Peer Reviewer Chatbot)
+                在大厅生成诊断报告后，你可以在此与“模拟 Associate Editor / 审稿人”展开在线答辩与交流。
+                审稿人将完全继承本期刊的学术品味，对你的修改思路与稳健性方案进行审核把关。
+                """
             )
-            report_output = gr.Markdown(
-                value="*报告生成后将在此处以精美 Markdown 格式自动渲染展示。*"
+            chatbot = gr.Chatbot(label="与 Associate Editor/审稿人对线中", height=500)
+            msg_input = gr.Textbox(
+                label="输入你的疑问或辩词 (例如: '关于第2点样本量劣势，如果我补充二期追踪数据达到 N=750，可以吗？')",
+                placeholder="在此输入你的消息...",
+                lines=2
             )
+            with gr.Row():
+                send_btn = gr.Button("发送", variant="primary")
+                clear_btn = gr.Button("清除历史对话")
 
     # 事件流绑定：输入关键词时，实时触发下拉框备选项更新
     search_input.input(
@@ -334,12 +400,27 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
         outputs=journal_input
     )
 
-    # 按钮点击事件绑定 (将 file_input 接入输入列表)
+    # 按钮点击事件绑定 (将 file_input 接入输入列表，并更新状态)
     submit_btn.click(
         fn=run_pipeline,
         inputs=[journal_input, years_input, max_papers_input, draft_input, file_input],
-        outputs=[status_output, report_output]
+        outputs=[status_output, report_output, report_state]
     )
+
+    # 聊天消息发送绑定
+    send_btn.click(
+        fn=chat_with_reviewer,
+        inputs=[msg_input, chatbot, report_state],
+        outputs=[chatbot, msg_input]
+    )
+    msg_input.submit(
+        fn=chat_with_reviewer,
+        inputs=[msg_input, chatbot, report_state],
+        outputs=[chatbot, msg_input]
+    )
+
+    # 清空对话
+    clear_btn.click(fn=lambda: ([], ""), inputs=None, outputs=[chatbot, msg_input])
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", server_port=7860, share=False, theme=theme)

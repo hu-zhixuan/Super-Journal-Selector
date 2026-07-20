@@ -75,11 +75,11 @@ class ProfileGenerator:
 
 ## 一、 目标期刊选稿偏好与近期趋势客观看板 (Objective Preferences & Trend Dashboard)
 
-### 0. 期刊基本学术属性与 SCI / 中科院分区表
-用单列表格呈现以下字段：
+### 0. 期刊基本学术属性与 JCR / 中科院分区表 (由本地权威数据映射)
+用单列表格或键值对表格呈现以下字段，数据请严格提取自 `metadata_json` 中的对应键值（切勿幻觉或编造）：
 * 官方 ISSN、H-index 影响力指数、估算影响因子 (Estimated IF)。
-* 最新 **JCR 分区**（注明大类与代表性小类分类领域）。
-* 最新 **中科院分区**（注明大类分区、代表性小类学科分区、以及是否为 Top 期刊）。
+* 最新 **JCR 分区** (如 Q1, Q2，对应 `jcr_zone`)。
+* 最新 **中科院分区** (如 1区, 2区, 3区，对应 `cas_zone`，小类划分对应 `cas_sub_categories`，是否为 Top 期刊对应 `is_top`)。
 
 ### 1. 研究范式与方法论分布表 (Paradigm & Methodology Distribution)
 * 用表格呈现各研究范式的占比与平均被引次数。
@@ -88,6 +88,11 @@ class ProfileGenerator:
 ### 2. 理论框架、工具与样本门槛指标表 (Theories, Tools & Sample Thresholds)
 * 用表格形式呈现：排名前列的核心理论框架（Top Theories）、常用分析工具链（Top Tools）以及定量分析的样本规模区间（Median/Min/Max）。
 * **### 📌 指标解读批注**：用极简短的 2 行字说明样本与工具的隐形门槛。
+
+### 3. 开源科学实践与统计汇报规范底线 (Open Science & Statistical Norms Audit)
+* 根据 `stats_json` 中的 `open_science_stats` 用表格呈现数据开源（Open Data）与代码开源（Open Code）等实践在近年文章中的实际占比，判断该刊是否属于开源友好型期刊。
+* 根据 `stats_json` 中的 `top_reporting_styles` 展现该刊的假设检验与统计报告风格偏好排行（例如是否普遍要求 Bootstrap 中介效应检验、显著性区间汇报等）。
+* **### 📌 开源与统计审计批注**：以 AE 身份用 1 句话点破该刊对数据公开或方法透明度的底线态度。
 
 ---
 
