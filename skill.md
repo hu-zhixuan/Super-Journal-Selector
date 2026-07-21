@@ -1,126 +1,118 @@
 ---
-name: ssci-diagnostic-assistant
-description: "【AI4SS赛道参赛核心技能】专为人文社科、交叉科学与量化实证研究者设计的“小同行审稿品味”循证对标与防拒稿诊断助手。针对社科投稿中隐形范式黑箱、样本底线与理论构念错配痛点，系统并发抓取 OpenAlex 近年 100~200 篇优质真实发表文献大样本，纯代码计算高维度余弦相似度精准抓出 Top 3 真实发表对标文献，通过 0.18 超低温 LLM 逆向解构主编与审稿人评分标准，生成零废话的实证对标矩阵与 Before-After 手术级修稿破招。"
+name: journal-profile-assistant
+description: 百篇大样本驱动的学术期刊选稿偏好画像、全网多期刊智能路由与主编秒拒死穴预测 Agent Skill
+version: 2.5.0
+author: AI4SS Team
+tags:
+  - AI4SS
+  - AI for Social Science
+  - Academic Publishing
+  - Journal Profile
+  - Peer Review
 ---
 
-# 🎯 AI4SS 参赛技能：社科跨学科与量化研究“小同行学术品味”循证对标与防拒稿诊断系统
+# 📊 期刊选稿画像助手 (Journal Profile Assistant)
+> **书生·浦砚 (Intern Discovery) 大赛自由赛道 (AI4SS) 参赛作品**
 
-当 **AI4S (AI for Science)** 在自然科学领域掀起范式革命时，人文社科与交叉科学同样经历了向 **AI4SS (AI for Social Science)** 的深度转型。然而，在社科实证与跨学科研究的成果投稿阶段，学者面临着比自然科学更复杂的**隐形黑箱与主观壁垒**：
-* **学术品味的极度“偏口”与范式黑箱**：心理学、经济学、管理学、教育与行为计算等刊物（如 *CHB*, *MISQ*, *Physica A*, *AER*）对理论视角（Constructs）、模型复杂性（如 SEM-PLS vs 普通线性回归）、有效样本阈值（N > 800）甚至量化工具链拥有极强的隐形执念。
-* **Desk Reject（初审拒稿）的高发重灾区**：大量有价值的问卷或实证数据，只因未踩准小同行的“理论包装与实证审美”，或遗漏了稳健性检验（Robustness Check），在主编初审前 3 分钟即遭秒拒。
+`journal-profile-assistant` 是一个针对学术论文投稿“最后一公里”痛点打造的 **百篇大样本驱动的期刊选稿底层偏好画像与全网智能路由 Agent Skill**。
 
-本 Skill 专为 **书生科学发现平台 (Intern Discovery) SCP 广场** 与 **AI4SS 自由赛道** 深度研发，是一把**“循证诊断与修稿防御手术刀”**——它抓取近年百篇级真实发表文献，将你的全文草稿在本地与这些文献做**零幻觉余弦聚类对标**，直击硬伤，打通 AI 辅助社科科研的最后一公里！
-
----
-
-## 🌟 AI4SS 赛道专属创新与技术壁垒 (Key Novelties for Social Sciences)
-
-*   **🔍 百篇大样本本地余弦相似度聚类对标 (0-Token Local Benchmarking)**：
-    不依赖大模型幻觉，零 Token 消耗，在本地使用纯 Python 高维词频语义向量余弦算法，在 **100~200+ 篇大样本真实文献库**中，极速精准锁定探讨同样构念与变量的 **Top 3 篇亚领域标杆文献**，具有极致特殊指向性！
-*   **📊 告别散文腔：强制二维实证矩阵与具体论文举证**：
-    系统将 LLM 采样温度锁死在 `0.18` 超低温，强制要求抛弃通用包装套话，把用户草稿与标杆文献进行**“研究范式、理论视角、数据源/有效样本、统计模型、创新包装”五维矩阵对标**；每一句诊断**必须在括号内指明真实发表的《论文标题》作为证据**。
-*   **🛡️ “出题人”主编视角逆向解构 (Mock Peer Review & Preemptive Defenses)**：
-    针对用户草稿与 Top 3 相似文献的落差，模拟严苛的小同行审稿人，抛出 **3 个最致命的潜在拒稿质询**，并直接提供投稿前的 Before-After 句式重构、图表补充及理论扩展防御建议。
-*   **📂 全量解析 Word/PDF 长文 (Full-text Social Science Extraction)**：
-    突破只读摘要的限制，全量解析 `.docx` / `.pdf`，精准捕捉社科长文后段具体的样本规模（如 `N=761`、多时点面板数据结构）与控制变量细节。
-*   **🎯 智能社科期刊别名与发文活跃度双路由 (Smart Alias & Active Route)**：
-    内置 `PRA`、`CHB`、`MISQ`、`JACS` 等高频缩写与中文俗称映射字典，在联想时实时计算近三年发文活跃度，剔除历史停更旧期刊，富文本展示近期发文量与估算 IF，杜绝选刊失误。
+通过结合 **OpenAlex 开放学术大样本 (100+ 篇)**、**DeepSeek-v4-flash 多线程结构化抽取** 与 **纯代码余弦聚类算法**，解决传统选稿工具“泛泛而谈、缺乏特异性指向、AI 幻觉编造”的致命缺陷。
 
 ---
 
-## 🏗️ 4 层解耦流水线架构 (Pipeline Architecture)
+## 🌟 核心杀手锏功能
 
+1. **🧭 全网多期刊梯队智能路由大盘 (Smart Multi-Journal Router)**：
+   输入草稿即可自动比对全网学科期刊池，输出包含契合度得分与录用估计的 **冲刺 (Reaching)**、**主投 (Target)**、**保底 (Safe)** 三级投递阵列。
+
+2. **🚨 主编 Desk Reject (秒拒) 致命死穴预测 (Desk Reject Predictor)**：
+   硬核审计草稿是否触发该期刊近 3 年大样本的物理死穴（如范式严重偏向非主流、样本量未达中位数线）。
+
+3. **🔬 Top 1 标杆文献段落级逻辑链解构 (Paragraph-Level Logical Alignment)**：
+   一比一拆解该期刊近期最相似高引标杆论文的引言与方法论写作骨架，提供像素级对齐修改建议。
+
+4. **⚖️ 归一化 Citation Validator 真实性校验**：
+   正文引用的文献自动与真实抓取池比对，未验证文献显示 `[⚠️ Unverified Reference]` 显式警告，彻底杜绝 AI 虚假引用。
+
+5. **📊 实时 Token 成本与耗时监控**：
+   单次百篇分析仅消耗约 2.3 万 Tokens（预估费用低至 0.02 元人民币），耗时支持秒级推流展示。
+
+---
+
+## 🛠️ 输入与输出规范 (Skill Specification)
+
+### 1. 输入参数 (Input Schema)
+```json
+{
+  "journal_name": "Computers in Human Behavior",
+  "years": 3,
+  "max_papers": 100,
+  "user_draft_text": "Optionally pass title/abstract or path to .docx/.pdf file"
+}
 ```
-                       [用户输入：期刊名/别名/缩写 + 论文草稿]
-                                         │
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Layer ① : 数据抓取与活跃路由层 (fetch_papers.py)                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  连接 OpenAlex API，抓取近年百篇级优质发文与官方指标（ISSN/H-index/估算IF）。 │
-│  根据 counts_by_year 自动计算发文活跃度权重，避免匹配到停更的历史旧条目。    │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │ 论文摘要与概念库 + 期刊指标
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Layer ② : 并发特征提取层 (extract_features.py)                             │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  开启多线程池 (Workers=10) 并发调用 LLM，将百篇级文献极速转为结构化 JSON 实体。│
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │ 结构化特征实体列表
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Layer ③ : 纯代码统计与相似度算法层 (aggregate.py)                          │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  用纯数学代码计算理论与工具排行（0 Token 消耗）。                           │
-│  【核心算法】：通过余弦相似度算法，将用户草稿在大样本池中精准对标出 Top 3 标杆。│
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │ 聚合统计数据 + Top 3 标杆文献
-                                       ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  Layer ④ : 循证战略画像与修稿大脑层 (generate_profile.py)                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  整合所有数据，在 0.18 超低温下进行“画表-对标-找茬-破招”四步法推演。          │
-│  严控文风，每句话必须引用真实的《论文标题》作为证据，不许出现 AI 空话套话。  │
-└──────────────────────────────────────┬──────────────────────────────────────┘
-                                       │
-                                       ▼
-                  [最终交付：富表格化的专属对标修稿诊断 Markdown 报告]
+
+### 2. 输出结构 (Output Schema)
+```json
+{
+  "status": "success",
+  "journal_metadata": {
+    "display_name": "Computers in Human Behavior",
+    "issn": "0747-5632",
+    "jcr_zone": "Q1",
+    "cas_zone": "1区",
+    "is_top": "是 (Top 期刊)"
+  },
+  "aggregated_stats": {
+    "total_papers_analyzed": 100,
+    "method_distribution": {"Quantitative_Empirical": {"count": 62, "percentage": 62.0}},
+    "sample_size_stats": {"min": 312, "median": 761, "max": 4500},
+    "most_similar_papers": [],
+    "recommended_references": []
+  },
+  "cost_statistics": {
+    "total_api_calls": 17,
+    "total_prompt_tokens": 17918,
+    "total_completion_tokens": 5927,
+    "estimated_cost_cny": 0.0214,
+    "elapsed_seconds": 44.19
+  },
+  "report_markdown": "# 《Computers in Human Behavior》选稿偏好与循证对标诊断报告..."
+}
 ```
 
 ---
 
-## 📋 使用与提交指南
+## 🚀 快速使用说明 (Quick Start)
 
-### 1. 环境依赖安装
-推荐使用 Python 3.10+，执行以下命令安装依赖：
-```bash
-pip install -r requirements.txt
+### 1. 命令行调用 (SDK / Python Interface)
+```python
+from main import run_journal_profile_skill
+
+# 一键运行 Skill
+result = run_journal_profile_skill(
+    journal="Computers in Human Behavior",
+    years=3,
+    max_papers=100,
+    user_draft="examples/my_draft_test.docx"
+)
+
+print("处理状态:", result["status"])
+print("报告保存位置:", result["report_markdown"])
 ```
 
-### 2. 配置文件说明
-将 `.env.example` 复制为 `.env`，填入你的 API Key 和 Base URL：
-```env
-# 平台接入环境变量
-OPENALEX_EMAIL=your-email@example.com
-API_KEY=sk-6BWLfGuzxTcgBl48GfNJNFTJ2sSvUTKHl3wHnV3g8AKjKh3m
-BASE_URL=https://fxb.supa.net.cn:6443
-MODEL_NAME=deepseek-v4-flash
-```
-
-### 3. 一键启动 WebUI 界面
+### 2. WebUI 界面启动
 ```bash
 python app.py
 ```
-启动后访问 `http://127.0.0.1:7860` 即可在可视化界面中完成：
-1. 期刊拼写/缩写联想检索与近三年活跃度预览。
-2. 大样本容量调节滑块（支持 100~200 篇高并发快速处理）。
-3. 完整 Word/PDF 文档上传解析与手术级修稿建议导出。
+访问 `http://127.0.0.1:7860` 即可在可视化界面中使用。
 
-### 4. 运行命令行 CLI 工具
-你也可以在终端直接执行流水线：
+### 3. 运行自动化测试套件 (0.019 秒全量 Mock 通过)
 ```bash
-# 基础运行（无草稿）：生成该刊近期大样本 (100篇) 发文范式与倾向报告
-python main.py --journal "Physica A" --years 3 --max-papers 100
-
-# 循证诊断运行（附草稿）：将你的稿件与 Physica A 的百篇级真实发表库做余弦相似度聚类对标
-python main.py --journal "Physica A" --user-draft path/to/your_manuscript.docx --max-papers 100
+python -m unittest discover -s tests
 ```
 
 ---
 
-## 📦 循证诊断报告交付物大纲展示
-
-系统生成的诊断报告严格包含以下区块，以数据表和极简证据流呈现：
-
-1.  **📊 第一部分：期刊选稿偏好与近期趋势客观看板**
-    *   期刊基本属性表（ISSN/H-index/估算IF、中科院/JCR分区与Top期刊评定）。
-    *   研究范式与方法论分布表（提供定量/计算/定性等方法的被引权重）。
-    *   核心理论框架排行与样本量阈值分布表。
-    *   *### 📌 极简批注*：必须且只能引用代表性文献（如 `《论文标题》`）作为支撑证据。
-2.  **⚔️ 第二部分：【核心对标】用户稿件 vs 近年最相似 3 篇已发表文献对比矩阵**
-    *   **五维对比矩阵表**：将你的论文草稿与 Layer ③ 筛出的 3 篇相似文献，在“范式、理论视角、数据源规模、模型工具、创新包装”上以二维表格进行像素级对标。
-    *   *### 🚨 审稿人视角：致命差异狙击点*：指出你的草稿相对于这 3 篇已发表标杆的 3 个核心差距。
-3.  **🛡️ 第三部分：【独家解密】审稿人“出题人”心思与防御性修稿破招**
-    *   主编 AE 在前 180 秒内的 3 步淘汰清单判定逻辑。
-    *   针对你稿件的 3 个模拟审稿意见与对应的 **Before-After 句式改写、图表补充及数学包装封口方案**。
+## 📄 许可与竞赛备案
+* **参赛赛道**：书生·浦砚 AI4SS (AI for Social Science) 自由赛道
+* **开源协议**：[MIT License](LICENSE)
