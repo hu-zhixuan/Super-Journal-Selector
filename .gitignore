@@ -12,6 +12,8 @@ env/
 
 # Project output
 output/
+cache/
+examples/
 
 # IDE / Editor configuration
 .vscode/
