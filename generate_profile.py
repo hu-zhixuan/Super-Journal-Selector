@@ -71,7 +71,8 @@ class ProfileGenerator:
 请根据以上大样本真实数据，为作者撰写一份严谨、冰冷、高度具有特殊指向性且无 AI 废话的 Markdown 循证对标与修改诊断报告。
 因为我们的指标由大样本聚类算得，你必须充分展现对该刊小同行隐形偏好、真实样本门槛与理论执念的精确洞察！
 
-【🔴 极其严厉的输出控制规范】：
+【🔴 极其严厉的输出与去 AI 味规范】：
+0. **绝对禁止任何问候语与寒暄开场白**：严禁输出“好的，作者”、“作为...编委”、“我已基于大样本数据完成了诊断”等任何口水话与 AI 抒情句！直接从 `# 《期刊名》选稿偏好与循证对标诊断报告` 开始输出正文！
 1. **必须每句有据且具有极致特殊指向性**：不准泛泛而谈或使用通用套话。提示词中提供的所有结论，凡是涉及到该期刊的方法偏好、样本底线、理论构念、修稿盲区的判定，**必须在话术中明确用 `《论文标题》` 引用提供给你的真实文献作为实证！禁止凭空编造或幻想任何文献！**
 2. **必须看板化呈现**：拒绝长篇大论的“AI 抒情散文”。必须采用 **“数据表格 + 极简 bullet 点批注”** 的结构。批注要求一针见血，直指痛点。
 3. **对标文献与推荐引用文献必须分开**：
@@ -142,28 +143,51 @@ class ProfileGenerator:
         )
 
         try:
+            system_prompt = "You are a top-tier academic reviewer. Output clean Markdown directly starting from title `# `. NEVER output conversational greetings or AI fluff."
             report_content = self.llm.call(
                 prompt=prompt,
                 system_prompt=system_prompt,
-                temperature=0.15,  # 极低温度控制，抑制捏造幻觉
-                max_retries=3,
+                temperature=0.18
             )
             
-            # 运行 Citation Validator 引用校验器进行强制审查
-            validated_report = self.validate_citations(report_content, aggregated_stats)
+            # 自动清洗掉 AI 常见的寒暄套话前缀 (如 "好的，作者。作为...编委...")
+            if "# " in report_content:
+                first_header_idx = report_content.find("# ")
+                if first_header_idx > 0 and first_header_idx < 200:
+                    report_content = report_content[first_header_idx:].strip()
+
+            # 运行 Citation Validator 引用校验器进行审查 (过滤目标期刊名称本身)
+            validated_report = self.validate_citations(
+                report_content,
+                aggregated_stats,
+                journal_name=journal_name,
+                journal_metadata=journal_metadata
+            )
             logger.info("对标诊断报告生成并完成引用校验。")
             return validated_report
         except Exception as e:
             logger.error(f"生成报告异常: {str(e)}")
             raise
 
-    def validate_citations(self, report_markdown: str, aggregated_stats: Dict[str, Any]) -> str:
+    def validate_citations(
+        self,
+        report_markdown: str,
+        aggregated_stats: Dict[str, Any],
+        journal_name: Optional[str] = None,
+        journal_metadata: Optional[Dict[str, Any]] = None
+    ) -> str:
         """
         Citation Validator (引用校验器)：
         使用归一化匹配技术，自动审查大模型生成的正文中所有被《书名号》包裹的文献。
         若发现数据库中不存在该论文，则自动追加警告标签，拒绝盲目硬替换。
         """
         valid_titles = set()
+        
+        # 排除目标期刊名称本身的误报
+        if journal_name:
+            valid_titles.add(journal_name)
+        if journal_metadata and "display_name" in journal_metadata:
+            valid_titles.add(journal_metadata["display_name"])
         
         # 收集所有真实存在的论文标题作为校验白名单
         all_raw_papers = (
