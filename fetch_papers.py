@@ -87,8 +87,11 @@ class OpenAlexFetcher:
 
     def __init__(self, email: Optional[str] = None):
         self.email = email or os.getenv("OPENALEX_EMAIL")
+        if not self.email or self.email == "your_email@example.com":
+            logger.info("未在 .env 中检测到有效的 OPENALEX_EMAIL。建议配置真实邮箱以加入 OpenAlex Polite Pool，享受更高频的学术检索响应速度。")
+            self.email = "researcher@example.com"
         self.headers = {
-            "User-Agent": f"JournalProfileSkill/1.0 ({self.email or 'mailto:researcher@example.com'})"
+            "User-Agent": f"JournalProfileSkill/1.0 (mailto:{self.email})"
         }
 
     def resolve_journal_source(self, journal_name: str) -> Optional[Dict[str, Any]]:

@@ -42,6 +42,22 @@ install_dns_patch()
 # ===============================================================
 
 
+# ==================== Prompt 与算法版本控制 ====================
+import hashlib
+
+EXTRACTION_PROMPT_VERSION = "v1.3"
+REPORT_PROMPT_VERSION = "v2.0"
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+
+def get_prompt_fingerprint(prompt_version: str, model_name: str, temperature: float, system_prompt: str) -> str:
+    """
+    基于 Prompt 版本、模型名、温度和系统 Prompt 串生成 10 位指纹，防止缓存被旧 Prompt 污染。
+    """
+    raw_str = f"{prompt_version}:{model_name}:{temperature}:{system_prompt}"
+    return hashlib.md5(raw_str.encode("utf-8")).hexdigest()[:10]
+# ===============================================================
+
+
 class LLMClient:
     """
     统一封装的 LLM 客户端，适配 Anthropic Messages API 格式 (/v1/messages)。
@@ -61,6 +77,24 @@ class LLMClient:
         self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
         self.timeout = timeout
         self.max_tokens = max_tokens
+
+        # Token 与成本度量统计
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_api_calls = 0
+        self.token_source = "api"  # "api" 或 "estimated"
+
+        # 模型单价映射表 (输入 / 输出每百万 Token 费率，以美元计)
+        self.MODEL_PRICING = {
+            "deepseek-v4-flash": {
+                "input_per_1m_tokens": 0.1,
+                "output_per_1m_tokens": 0.2,
+            },
+            "deepseek-v3": {
+                "input_per_1m_tokens": 0.14,
+                "output_per_1m_tokens": 0.28,
+            }
+        }
 
         # 规范化 Base URL 路径
         self.url = self.base_url.rstrip("/")
@@ -132,6 +166,21 @@ class LLMClient:
                 if not text:
                     logger.error(f"API 响应结构异常，文本内容为空: {resp_data}")
                     raise ValueError("Anthropic API 返回内容为空")
+
+                # 解析统计使用量数据
+                usage = resp_data.get("usage", {})
+                p_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+                c_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+                self.total_api_calls += 1
+                if p_tokens or c_tokens:
+                    self.total_prompt_tokens += p_tokens
+                    self.total_completion_tokens += c_tokens
+                else:
+                    # 兜底粗估，并标记来源
+                    self.token_source = "estimated"
+                    self.total_prompt_tokens += len(prompt.split()) + len(system_prompt.split())
+                    self.total_completion_tokens += len(text.split())
+
                 return text
 
             except Exception as e:
@@ -243,3 +292,27 @@ class LLMClient:
             except Exception as e_repair:
                 logger.error(f"大模型自我修复 JSON 失败: {e_repair}")
                 raise ValueError(f"大模型自我修复 JSON 失败: {e_repair}") from e_repair
+
+    def get_cost_statistics(self) -> Dict[str, Any]:
+        """
+        获取当前的 API 调用次数、Token 消耗及预估费用。
+        """
+        pricing = self.MODEL_PRICING.get(self.model)
+        cost_usd = None
+        if pricing:
+            in_rate = pricing.get("input_per_1m_tokens", 0.1)
+            out_rate = pricing.get("output_per_1m_tokens", 0.2)
+            cost_usd = round(
+                (self.total_prompt_tokens / 1_000_000.0) * in_rate +
+                (self.total_completion_tokens / 1_000_000.0) * out_rate,
+                6
+            )
+        return {
+            "total_api_calls": self.total_api_calls,
+            "total_prompt_tokens": self.total_prompt_tokens,
+            "total_completion_tokens": self.total_completion_tokens,
+            "token_source": self.token_source,
+            "estimated_cost_usd": cost_usd,
+            "estimated_cost_cny": round(cost_usd * 7.2, 5) if cost_usd is not None else None
+        }
+

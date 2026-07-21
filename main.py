@@ -1,9 +1,12 @@
 import os
 import sys
 import re
+import time
+import json
+import hashlib
 import argparse
 import logging
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -132,6 +135,163 @@ def extract_search_keywords(llm_client: LLMClient, text: str) -> List[str]:
     return []
 
 
+def run_journal_profile_skill(
+    journal: str,
+    years: int = 3,
+    max_papers: int = 100,
+    user_draft_path: Optional[str] = None,
+    output_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    期刊选稿画像助手核心 Skill 服务入口。
+    供 CLI 启动或外部其它 Agent 作为 SDK 导入调用，返回结构化 JSON 及 Markdown 报告。
+    """
+    start_time = time.time()
+    logger.info(f"=== 🚀 启动期刊选稿画像流水线 | 目标期刊: {journal} ===")
+
+    try:
+        # 步骤准备与草稿解析
+        user_draft_text = read_user_draft(user_draft_path)
+        
+        search_query = None
+        keywords = []
+        llm_client = LLMClient()
+
+        if user_draft_text:
+            from aggregate import clean_and_truncate_draft
+            user_draft_text = clean_and_truncate_draft(user_draft_text)
+            keywords = extract_search_keywords(llm_client, user_draft_text)
+            if keywords:
+                search_query = " ".join(keywords)
+
+        # 冲突隔离目录名称生成 (包含期刊、年份、样本数、草稿哈希、关键词、模型名、Prompt版本)
+        safe_journal_filename = "".join(c if c.isalnum() else "_" for c in journal)
+        journal_slug = safe_journal_filename.lower()
+        draft_hash = hashlib.md5(user_draft_text.encode("utf-8")).hexdigest()[:8] if user_draft_text else "nodraft"
+        keywords_str = "_".join(keywords) if keywords else "nokeywords"
+        from llm_client import EXTRACTION_PROMPT_VERSION
+        
+        config_str = f"{journal_slug}_{years}_{max_papers}_{draft_hash}_{keywords_str}_{EXTRACTION_PROMPT_VERSION}_{llm_client.model}"
+        query_hash = hashlib.md5(config_str.encode("utf-8")).hexdigest()[:10]
+
+        if user_draft_text:
+            output_dir = os.path.join("output", f"{safe_journal_filename}_with_draft_{query_hash}")
+        else:
+            output_dir = os.path.join("output", safe_journal_filename)
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Layer ①: 抓取数据
+        logger.info("--- Layer ①: 进入开放文献抓取层 (OpenAlex API) ---")
+        fetcher = OpenAlexFetcher()
+        papers, journal_metadata = fetcher.fetch_recent_papers(
+            journal_name=journal,
+            years=years,
+            max_papers=max_papers,
+            search_query=search_query
+        )
+
+        if not papers:
+            return {
+                "status": "error",
+                "error_code": "NO_PAPERS_FETCHED",
+                "message": "未能抓取到任何有效的论文样本，流程中止。"
+            }
+
+        # Layer ②: LLM 结构化提取
+        logger.info("--- Layer ②: 进入 LLM 结构化特征提取层 ---")
+        extractor = FeatureExtractor(llm_client=llm_client)
+        features = extractor.extract_batch(papers)
+        
+        # 失败样本记录
+        if extractor.failed_papers:
+            failed_path = os.path.join(output_dir, "failed_papers.json")
+            try:
+                with open(failed_path, "w", encoding="utf-8") as ff:
+                    json.dump(extractor.failed_papers, ff, ensure_ascii=False, indent=2)
+                logger.warning(f"检测到 {len(extractor.failed_papers)} 篇论文特征提取失败，详细清单已落盘: {failed_path}")
+            except Exception as e_fail_w:
+                logger.warning(f"写入失败文献记录出错: {e_fail_w}")
+
+        if not features:
+            return {
+                "status": "error",
+                "error_code": "FEATURE_EXTRACTION_FAILED",
+                "message": "特征结构化分析层未成功提取到任何特征记录，流程中止。"
+            }
+
+        # Layer ③: 纯代码统计聚合
+        logger.info("--- Layer ③: 进入纯代码多维度统计聚合层 ---")
+        aggregator = ProfileAggregator()
+        aggregated_stats = aggregator.aggregate(features, user_draft_text=user_draft_text)
+
+        # Layer ④: LLM 深度画像与策略生成
+        logger.info("--- Layer ④: 进入 LLM 战略生成与修稿建议层 ---")
+        generator = ProfileGenerator(llm_client=llm_client)
+        report_markdown = generator.generate_report(
+            journal_name=journal,
+            aggregated_stats=aggregated_stats,
+            journal_metadata=journal_metadata,
+            user_draft_text=user_draft_text,
+        )
+
+        # 保存中间产物及统计信息落盘
+        try:
+            with open(os.path.join(output_dir, "papers.json"), "w", encoding="utf-8") as fj:
+                json.dump([p.to_dict() for p in papers], fj, ensure_ascii=False, indent=2)
+            with open(os.path.join(output_dir, "features.json"), "w", encoding="utf-8") as fj:
+                json.dump(features, fj, ensure_ascii=False, indent=2)
+            with open(os.path.join(output_dir, "aggregated_stats.json"), "w", encoding="utf-8") as fj:
+                json.dump(aggregated_stats, fj, ensure_ascii=False, indent=2)
+        except Exception as e_save_j:
+            logger.warning(f"保存中间产物 JSON 文件失败: {e_save_j}")
+
+        # 成本与耗时度量统计
+        elapsed_time = time.time() - start_time
+        cost_stats = llm_client.get_cost_statistics()
+        cost_stats["total_elapsed_seconds"] = round(elapsed_time, 2)
+        try:
+            with open(os.path.join(output_dir, "execution_stats.json"), "w", encoding="utf-8") as fs:
+                json.dump(cost_stats, fs, ensure_ascii=False, indent=2)
+        except Exception as e_cost_w:
+            logger.warning(f"保存运行消耗指标失败: {e_cost_w}")
+
+        # 保存最终 Markdown 报告
+        final_output_path = output_path
+        if not final_output_path:
+            final_output_path = os.path.join(output_dir, "report.md")
+        else:
+            os.makedirs(os.path.dirname(os.path.abspath(final_output_path)), exist_ok=True)
+
+        try:
+            with open(final_output_path, "w", encoding="utf-8") as f:
+                f.write(report_markdown)
+            logger.info(f"=== 🎉 恭喜！对标诊断报告已成功写入: {final_output_path} ===")
+        except Exception as e_w_rep:
+            logger.error(f"写入报告 Markdown 失败: {e_w_rep}")
+
+        return {
+            "status": "success",
+            "journal": journal,
+            "journal_metadata": journal_metadata,
+            "aggregated_stats": aggregated_stats,
+            "top3_similar_papers": aggregated_stats.get("most_similar_papers", []),
+            "top5_recommended_references": aggregated_stats.get("recommended_references", []),
+            "warnings": [p["title"] for p in extractor.failed_papers] if extractor.failed_papers else [],
+            "cost_statistics": cost_stats,
+            "report_markdown": report_markdown,
+            "output_directory": output_dir,
+            "report_path": final_output_path
+        }
+
+    except Exception as e:
+        logger.error(f"流水线运行中发生致命异常: {e}")
+        return {
+            "status": "error",
+            "error_code": type(e).__name__,
+            "message": str(e)
+        }
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="期刊选稿画像助手 (Journal Profile Assistant) - 4层数据驱动流水线"
@@ -178,97 +338,29 @@ def main():
     if args.max_papers > 300:
         logger.warning("您指定的样本上限较大 (大于300)，可能会显著增加 API 调用成本和执行时间。")
 
-    journal_name = args.journal.strip()
-    logger.info(f"=== 🚀 启动期刊选稿画像流水线 | 目标期刊: {journal_name} ===")
-
-    # 步骤准备与草稿解析
-    user_draft_text = read_user_draft(args.user_draft)
-    
-    search_query = None
-    if user_draft_text:
-        from aggregate import clean_and_truncate_draft
-        user_draft_text = clean_and_truncate_draft(user_draft_text)
-        
-        # 初始化 LLM 客户端提取主题词
-        llm_client = LLMClient()
-        keywords = extract_search_keywords(llm_client, user_draft_text)
-        if keywords:
-            search_query = " ".join(keywords)
-
-    # Layer ①: 抓取数据（传入 search_query 激活双通道动态检索）
-    logger.info("--- Layer ①: 进入开放文献抓取层 (OpenAlex API) ---")
-    fetcher = OpenAlexFetcher()
-    try:
-        papers, journal_metadata = fetcher.fetch_recent_papers(
-            journal_name=journal_name,
-            years=args.years,
-            max_papers=args.max_papers,
-            search_query=search_query
-        )
-    except Exception as e:
-        logger.error(f"抓取文献大样本失败: {e}")
-        sys.exit(1)
-
-    if not papers:
-        logger.error("未能抓取到足够或有效的带摘要论文，流程提前停止。")
-        sys.exit(1)
-
-    # Layer ②: LLM 结构化提取
-    logger.info("--- Layer ②: 进入 LLM 结构化特征提取层 ---")
-    extractor = FeatureExtractor()
-    features = extractor.extract_batch(papers)
-    if not features:
-        logger.error("LLM 结构化解析未返回有效特征记录，流程提前停止。")
-        sys.exit(1)
-
-    # Layer ③: 纯代码统计聚合
-    logger.info("--- Layer ③: 进入纯代码多维度统计聚合层 ---")
-    aggregator = ProfileAggregator()
-    aggregated_stats = aggregator.aggregate(features, user_draft_text=user_draft_text)
-
-    # Layer ④: LLM 深度画像与修稿策略生成
-    logger.info("--- Layer ④: 进入 LLM 战略生成与修稿建议层 ---")
-    generator = ProfileGenerator()
-    report_markdown = generator.generate_report(
-        journal_name=journal_name,
-        aggregated_stats=aggregated_stats,
-        journal_metadata=journal_metadata,
-        user_draft_text=user_draft_text,
+    res = run_journal_profile_skill(
+        journal=args.journal.strip(),
+        years=args.years,
+        max_papers=args.max_papers,
+        user_draft_path=args.user_draft,
+        output_path=args.output
     )
 
-    # 保存报告与中间结果落盘 (落盘至 output/{journal_slug}/ 保证生产级可观测性)
-    safe_journal_filename = "".join(c if c.isalnum() else "_" for c in journal_name)
-    output_dir = os.path.join("output", safe_journal_filename)
-    os.makedirs(output_dir, exist_ok=True)
-
-    # 保存中间产物落盘
-    try:
-        import json
-        with open(os.path.join(output_dir, "papers.json"), "w", encoding="utf-8") as fj:
-            json.dump([p.to_dict() for p in papers], fj, ensure_ascii=False, indent=2)
-        with open(os.path.join(output_dir, "features.json"), "w", encoding="utf-8") as fj:
-            json.dump(features, fj, ensure_ascii=False, indent=2)
-        with open(os.path.join(output_dir, "aggregated_stats.json"), "w", encoding="utf-8") as fj:
-            json.dump(aggregated_stats, fj, ensure_ascii=False, indent=2)
-        logger.info(f"中间产物 (papers.json, features.json, aggregated_stats.json) 已成功落盘保存至: {output_dir}")
-    except Exception as e_save_j:
-        logger.warning(f"保存中间产物 JSON 失败: {e_save_j}")
-
-    # 保存 Markdown 报告
-    output_path = args.output
-    if not output_path:
-        output_path = os.path.join(output_dir, "report.md")
-    else:
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-
-    try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(report_markdown)
-        logger.info(f"=== 🎉 恭喜！完整的期刊画像与修稿建议已成功写入: {output_path} ===")
-    except Exception as e:
-        logger.error(f"保存最终 Markdown 文件失败: {str(e)}")
+    if res.get("status") == "error":
+        logger.error(f"❌ 流程终止！错误码: {res.get('error_code')}，错误信息: {res.get('message')}")
         sys.exit(1)
+    else:
+        cost = res.get("cost_statistics", {})
+        logger.info(f"=== 运行统计 ===")
+        logger.info(f"API 总请求次数: {cost.get('total_api_calls')} 次")
+        logger.info(f"总 Prompt Token 消耗: {cost.get('total_prompt_tokens')} (源: {cost.get('token_source')})")
+        logger.info(f"总 Completion Token 消耗: {cost.get('total_completion_tokens')} (源: {cost.get('token_source')})")
+        logger.info(f"预估总费用: {cost.get('estimated_cost_usd')} USD ({cost.get('estimated_cost_cny')} CNY)")
+        logger.info(f"总耗时: {cost.get('total_elapsed_seconds')} 秒")
+        logger.info(f"报告已成功生成，路径: {res.get('report_path')}")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
     main()
+

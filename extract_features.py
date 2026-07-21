@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import hashlib
+import time
+import threading
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from tqdm import tqdm
@@ -50,17 +52,28 @@ class FeatureExtractor:
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm = llm_client or LLMClient()
+        self.failed_papers = []
 
     def extract_paper(self, paper: PaperRecord) -> Optional[ExtractedFeatures]:
         """
         对单篇论文摘要调用 LLM 执行信息抽取，内置本地特征缓存层以节省 API Token 成本。
         """
+        from llm_client import get_prompt_fingerprint, EXTRACTION_PROMPT_VERSION
+
         paper_id_clean = paper.id or paper.doi or "unknown"
         paper_hash = hashlib.md5(paper_id_clean.encode("utf-8")).hexdigest()[:12]
-        prompt_version = "v2"
+        
+        system_prompt = "You are an expert academic metadata extractor. Output valid JSON only."
+        fingerprint = get_prompt_fingerprint(
+            prompt_version=EXTRACTION_PROMPT_VERSION,
+            model_name=self.llm.model,
+            temperature=0.1,
+            system_prompt=system_prompt
+        )
+        
         cache_dir = "cache"
         os.makedirs(cache_dir, exist_ok=True)
-        cache_file = os.path.join(cache_dir, f"feature_{paper_hash}_{prompt_version}.json")
+        cache_file = os.path.join(cache_dir, f"feature_{paper_hash}_{fingerprint}.json")
 
         # 检查本地缓存
         if os.path.exists(cache_file):
@@ -72,6 +85,9 @@ class FeatureExtractor:
                 return feature_obj
             except Exception as e_cache:
                 logger.warning(f"读取论文特征缓存失败: {e_cache}")
+
+        # 使用 QPS 限速保护 API 不被频限 (频率控制：2 QPS)
+        self.rate_limit_qps()
 
         prompt = f"""
 You are an expert academic research reviewer. Read the following paper title and abstract carefully, then extract key methodological and theoretical features into valid JSON format matching the schema below.
@@ -106,20 +122,38 @@ Output MUST be clean valid JSON only without extra conversational markdown.
             return feature_obj
         except Exception as e:
             logger.warning(f"论文 [{paper.title[:30]}...] 特征抽取出现异常: {str(e)}")
-            return None
+            raise e
+
+    # 类级别的 QPS 控制机制
+    _qps_lock = threading.Lock() if 'threading' in globals() else None
+    _last_req_time = [0.0]
+
+    def rate_limit_qps(self):
+        """
+        线程安全的 QPS 限速机制，确保请求间隔不小于 0.5s (2 QPS 限速)。
+        """
+        import threading
+        if not FeatureExtractor._qps_lock:
+            FeatureExtractor._qps_lock = threading.Lock()
+        
+        with FeatureExtractor._qps_lock:
+            now = time.time()
+            elapsed = now - FeatureExtractor._last_req_time[0]
+            if elapsed < 0.5:
+                time.sleep(0.5 - elapsed)
+            FeatureExtractor._last_req_time[0] = time.time()
 
     def extract_batch(self, papers: List[PaperRecord], max_workers: int = 3) -> List[Dict[str, Any]]:
         """
         利用多线程池并发批量解析大样本论文列表，实现百篇级高频特征极速结构化抽取
         """
+        import threading
+        from datetime import datetime
         logger.info(f"开始开启并发线程池 (Workers={max_workers})，批量结构化解析 {len(papers)} 篇大样本论文特征...")
         extracted_results: List[Dict[str, Any]] = []
+        self.failed_papers = []
 
         def process_one(p: PaperRecord) -> Optional[Dict[str, Any]]:
-            import time
-            import random
-            time.sleep(random.uniform(0.05, 0.4))
-            
             feat = self.extract_paper(p)
             if feat:
                 feat_dict = feat.model_dump()
@@ -134,9 +168,30 @@ Output MUST be clean valid JSON only without extra conversational markdown.
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_paper = {executor.submit(process_one, p): p for p in papers}
             for future in tqdm(as_completed(future_to_paper), total=len(papers), desc="大样本并发抽取"):
-                res = future.result()
-                if res:
-                    extracted_results.append(res)
+                p = future_to_paper[future]
+                try:
+                    res = future.result()
+                    if res:
+                        extracted_results.append(res)
+                    else:
+                        self.failed_papers.append({
+                            "paper_id": p.id or p.doi or "unknown",
+                            "title": p.title,
+                            "error_type": "ExtractionFailure",
+                            "error_message": "LLM extraction returned null feature object",
+                            "retry_count": 3,
+                            "timestamp": datetime.now().isoformat()
+                        })
+                except Exception as exc:
+                    self.failed_papers.append({
+                        "paper_id": p.id or p.doi or "unknown",
+                        "title": p.title,
+                        "error_type": type(exc).__name__,
+                        "error_message": str(exc),
+                        "retry_count": 3,
+                        "timestamp": datetime.now().isoformat()
+                    })
 
         logger.info(f"并发解析完成，成功获得 {len(extracted_results)}/{len(papers)} 篇大样本有效特征实体。")
         return extracted_results
+
