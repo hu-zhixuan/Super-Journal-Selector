@@ -122,7 +122,7 @@ class LLMClient:
         prompt: str,
         system_prompt: str = "You are a helpful academic research assistant.",
         temperature: float = 0.3,
-        max_retries: int = 3,
+        max_retries: int = 5,
     ) -> str:
         """
         发起 Anthropic Messages 协议请求
@@ -269,7 +269,7 @@ class LLMClient:
         prompt: str,
         system_prompt: str = "You are an AI research analyst. You must output valid JSON only. Do not wrap in markdown blocks.",
         temperature: float = 0.1,
-        max_retries: int = 3,
+        max_retries: int = 5,
     ) -> Dict[str, Any]:
         """
         请求并强力解析 JSON 输出，内置 JSON 损坏自动重试修复机制。

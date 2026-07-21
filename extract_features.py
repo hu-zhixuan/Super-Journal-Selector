@@ -140,8 +140,8 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         with FeatureExtractor._qps_lock:
             now = time.time()
             elapsed = now - FeatureExtractor._last_req_time[0]
-            if elapsed < 0.2:
-                sleep_time = 0.2 - elapsed
+            if elapsed < 0.5:
+                sleep_time = 0.5 - elapsed
                 FeatureExtractor._last_req_time[0] = now + sleep_time
             else:
                 FeatureExtractor._last_req_time[0] = now
@@ -149,7 +149,7 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    def extract_batch_iter(self, papers: List[PaperRecord], max_workers: int = 5):
+    def extract_batch_iter(self, papers: List[PaperRecord], max_workers: int = 2):
         """
         生成器版本的 extract_batch，每完成一篇论文特征抽取，就 yield (completed_count, total_count, paper, extracted_results)
         便于 WebUI / CLI 实时接收并更新百分比进度条与状态展示。
