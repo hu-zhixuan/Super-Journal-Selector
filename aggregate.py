@@ -91,7 +91,7 @@ class ProfileAggregator:
             return 0.0
             
         dot_product = sum(freq1.get(w, 0) * freq2.get(w, 0) for w in all_words)
-        magnitude1 = math_sqrt = sum(freq1.get(w, 0) ** 2 for w in all_words) ** 0.5
+        magnitude1 = sum(freq1.get(w, 0) ** 2 for w in all_words) ** 0.5
         magnitude2 = sum(freq2.get(w, 0) ** 2 for w in all_words) ** 0.5
         
         if not magnitude1 or not magnitude2:
