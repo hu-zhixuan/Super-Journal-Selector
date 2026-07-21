@@ -1,8 +1,12 @@
-import logging
+import os
+import json
 import re
+import logging
+import hashlib
 from typing import List, Dict, Any, Optional
 from collections import Counter
 import statistics
+from datetime import datetime
 
 # 尝试导入 sentence-transformers 以支持高精度语义向量计算
 try:
@@ -26,157 +30,125 @@ def clean_and_truncate_draft(text: str, max_chars: int = 150000) -> str:
     text_len = len(text)
     # 在文章后 40% 的位置查找参考文献标识进行截断
     search_start = int(text_len * 0.6)
+    tail_text = text[search_start:]
     
+    # 匹配各类参考文献标题的正则式
     ref_patterns = [
-        r'\n\s*references\s*\n',
-        r'\n\s*bibliography\s*\n',
-        r'\n\s*works\s+cited\s*\n',
-        r'\n\s*参考文献\s*\n'
+        r"\n\s*(?:==+\s*)?(?:References|Bibliography|REFERENCES|BIBLIOGRAPHY|参考文献)\s*(?:\n|=)",
+        r"\n\s*\[\s*(?:References|REFERENCES)\s*\]\s*\n"
     ]
     
     cutoff_idx = -1
-    for pattern in ref_patterns:
-        matches = list(re.finditer(pattern, text, re.IGNORECASE))
-        if matches:
-            last_match = matches[-1]
-            idx = last_match.start()
-            if idx >= search_start:
-                cutoff_idx = idx
-                break
-                
+    for pat in ref_patterns:
+        match = re.search(pat, tail_text)
+        if match:
+            cutoff_idx = search_start + match.start()
+            break
+            
     if cutoff_idx != -1:
-        logger.info(f"检测到文末参考文献章节，自动切除，节省约 {text_len - cutoff_idx} 字符。")
-        text = text[:cutoff_idx]
-        
+        logger.info(f"✨ 智能草稿清洗：检测到文末参考文献章节，执行切除（切除位置: {cutoff_idx}/{text_len}，节省了 {text_len - cutoff_idx} 字符）")
+        text = text[:cutoff_idx].strip()
+    
+    # 截断限制
     if len(text) > max_chars:
-        keep_head = int(max_chars * 0.6)
-        keep_tail = int(max_chars * 0.4)
-        logger.info(f"文本仍超长 ({len(text)} 字符)，执行智能头部/尾部截留（保留前 {keep_head} 和后 {keep_tail} 字符）。")
-        text = text[:keep_head] + "\n\n... [此处因文本过长，中间部分细节已被自动压缩截断] ...\n\n" + text[-keep_tail:]
+        half_limit = max_chars // 2
+        logger.info(f"⚠️ 草稿文本超长 ({len(text)} 字符)，执行智能保留头部和尾部截断...")
+        text = text[:half_limit] + "\n\n... [中间超长内容已被智能截断压缩以优化大模型上下文窗口] ...\n\n" + text[-half_limit:]
         
     return text
 
 
 class ProfileAggregator:
     """
-    层③：纯代码统计聚合层。不依赖 LLM，以 0-Token 消耗的纯 Python 统计函数进行指标计算，
-    并内置文本余弦相似度算法对标用户草稿，筛选出 Top 3 最相似的近年发表文献。
+    层③：统计聚合层。不调用 LLM，纯用 Python 代码将百篇级文献的结构化特征进行高维聚合，计算各种分布与相似度对标。
     """
 
     @staticmethod
     def calculate_cosine_similarity(text1: str, text2: str) -> float:
         """
-        基于词频（Bag of Words）计算两个文本段落的余弦相似度，过滤停用词以提高精准度
+        BoW 词频余弦相似度计算，内置英文常用停用词（Stop Words）过滤降噪
         """
-        if not text1 or not text2:
-            return 0.0
-        
-        # 常见英文停用词表，过滤无实际语义的结构词
-        STOP_WORDS = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 
-            'with', 'by', 'of', 'about', 'as', 'is', 'are', 'was', 'were', 'be',
-            'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
-            'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must',
-            'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 
-            'we', 'they', 'my', 'your', 'his', 'her', 'its', 'our', 'their',
-            'me', 'him', 'them', 'us', 'itself', 'themselves', 'ourselves', 
-            'myself', 'himself', 'herself', 'from', 'up', 'down', 'out', 'over', 
-            'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 
-            'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 
-            'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 
-            'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'now', 'which',
-            'who', 'whom', 'also', 'between', 'into', 'through', 'during', 'before',
-            'after', 'above', 'below'
+        # 内置 70+ 词学术常见停用词表
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'at', 'by', 'from', 'in', 'on', 'to',
+            'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above',
+            'below', 'of', 'up', 'down', 'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+            'having', 'do', 'does', 'did', 'doing', 'can', 'could', 'should', 'would', 'will', 'i', 'me', 'my', 'we',
+            'our', 'us', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'it', 'its', 'they', 'them', 'their', 'this',
+            'that', 'these', 'those', 'which', 'who', 'whom', 'as', 'than', 'such', 'both', 'each', 'either', 'neither'
         }
         
-        def get_words(t: str) -> List[str]:
-            # 转小写并提取单词，过滤标点及停用词，忽略单字母
-            words = re.findall(r'\b\w+\b', t.lower())
-            return [w for w in words if w not in STOP_WORDS and len(w) > 1]
+        def get_word_freq(t: str) -> Dict[str, int]:
+            words = re.sub(r"\W+", " ", t.lower()).split()
+            filtered_words = [w for w in words if w and w not in stop_words and not w.isdigit()]
+            return Counter(filtered_words)
 
-        w1 = get_words(text1)
-        w2 = get_words(text2)
-        if not w1 or not w2:
+        freq1 = get_word_freq(text1)
+        freq2 = get_word_freq(text2)
+        
+        all_words = set(freq1.keys()).union(set(freq2.keys()))
+        if not all_words:
             return 0.0
-
-        c1 = Counter(w1)
-        c2 = Counter(w2)
+            
+        dot_product = sum(freq1.get(w, 0) * freq2.get(w, 0) for w in all_words)
+        magnitude1 = math_sqrt = sum(freq1.get(w, 0) ** 2 for w in all_words) ** 0.5
+        magnitude2 = sum(freq2.get(w, 0) ** 2 for w in all_words) ** 0.5
         
-        all_words = set(c1.keys()).union(set(c2.keys()))
-        
-        # 向量点积与模长计算
-        dot_product = sum(c1.get(w, 0) * c2.get(w, 0) for w in all_words)
-        mag1 = sum(v ** 2 for v in c1.values()) ** 0.5
-        mag2 = sum(v ** 2 for v in c2.values()) ** 0.5
-        
-        if not mag1 or not mag2:
+        if not magnitude1 or not magnitude2:
             return 0.0
-        return dot_product / (mag1 * mag2)
+        return dot_product / (magnitude1 * magnitude2)
 
-    @staticmethod
-    def aggregate(features_list: List[Dict[str, Any]], user_draft_text: Optional[str] = None) -> Dict[str, Any]:
+    def aggregate(self, features_list: List[Dict[str, Any]], user_draft_text: Optional[str] = None) -> Dict[str, Any]:
         """
-        计算方法学占比、高频理论矩阵、分析模型热度榜、样本阈值分布，并基于余弦相似度找出 Top 3 最对标的已发表论文。
+        多维度聚合特征，集成 Sentence-Transformers 个性化相似度对标，以及代码打分排序的 Top 5 推荐引用文献生成。
         """
         total_count = len(features_list)
         if total_count == 0:
-            raise ValueError("传入的结构化特征列表为空，无法进行统计聚合。")
+            return {}
 
-        logger.info(f"正在对 {total_count} 篇文献的特征进行多维度统计聚合与对标相似度计算...")
+        current_year = datetime.now().year
 
-        # 1. 研究范式（分类统计）分布与占比
-        method_counts = Counter([f.get("method_category", "Other") for f in features_list])
+        # 1. 研究方法范式分布 (Method Categories)
+        method_counts = Counter([f.get("method_category") for f in features_list])
         method_distribution = {
-            category: {
-                "count": count,
-                "percentage": round((count / total_count) * 100, 1),
+            m: {
+                "count": cnt,
+                "percentage": round((cnt / total_count) * 100, 1)
             }
-            for category, count in method_counts.most_common()
+            for m, cnt in method_counts.most_common()
         }
 
-        # 2. 各研究范式下的平均被引权重
+        # 2. 统计各方法的平均被引次数 (Method Citation Impact)
         method_citations: Dict[str, List[int]] = {}
         for f in features_list:
-            cat = f.get("method_category", "Other")
-            if cat not in method_citations:
-                method_citations[cat] = []
-            method_citations[cat].append(f.get("cited_by_count", 0))
-
+            m = f.get("method_category", "Unknown")
+            citations = f.get("cited_by_count", 0)
+            method_citations.setdefault(m, []).append(citations)
+            
         method_avg_citations = {
-            cat: round(statistics.mean(c_list), 1) if c_list else 0.0
-            for cat, c_list in method_citations.items()
+            m: round(statistics.mean(cits), 1) if cits else 0
+            for m, cits in method_citations.items()
         }
 
-        # 3. 样本量级门槛统计（仅针对 Quantitative & Computational 中有效 numeric 样本量 > 0 的）
-        numeric_samples = [
-            f["sample_size_approx"]
+        # 3. 定量样本量范围的统计属性 (Sample Size Stats)
+        sample_sizes = [
+            f.get("sample_size_approx", -1)
             for f in features_list
             if f.get("sample_size_approx", -1) > 0
         ]
-        sample_size_stats = {}
-        if numeric_samples:
-            numeric_samples.sort()
-            sample_size_stats = {
-                "min_sample": min(numeric_samples),
-                "median_sample": int(statistics.median(numeric_samples)),
-                "max_sample": max(numeric_samples),
-                "valid_numeric_count": len(numeric_samples),
-            }
-        else:
-            sample_size_stats = {
-                "min_sample": "N/A",
-                "median_sample": "N/A",
-                "max_sample": "N/A",
-                "valid_numeric_count": 0,
-            }
+        sample_size_stats = {
+            "min": min(sample_sizes) if sample_sizes else "N/A",
+            "median": int(statistics.median(sample_sizes)) if sample_sizes else "N/A",
+            "max": max(sample_sizes) if sample_sizes else "N/A"
+        }
 
-        # 4. 高频核心理论框架排行 (Top 12)
+        # 4. 高频理论框架/构念排行 (Top 12)
         all_theories = []
         for f in features_list:
-            for t in f.get("theoretical_frameworks", []):
-                cleaned_t = t.strip()
-                if cleaned_t and len(cleaned_t) > 2:
-                    all_theories.append(cleaned_t)
+            for theory in f.get("theoretical_frameworks", []):
+                cleaned_theory = theory.strip()
+                if cleaned_theory and len(cleaned_theory) > 1:
+                    all_theories.append(cleaned_theory)
         top_theories = Counter(all_theories).most_common(12)
 
         # 5. 高频分析统计工具排行 (Top 12)
@@ -188,21 +160,18 @@ class ProfileAggregator:
                     all_tools.append(cleaned_tool)
         top_tools = Counter(all_tools).most_common(12)
 
-        # 5b. 方法论审计：开源科学实践聚合统计 (Open Science Practices)
+        # 5b. 开源科学实践聚合统计
         open_science_counter = Counter()
         for f in features_list:
             practices = f.get("open_science_practices", [])
-            # 处理 list[str]
             if not practices:
                 open_science_counter["None"] += 1
             else:
                 for p in practices:
                     cleaned_p = p.strip()
-                    # 规范化命名，如 Open Data, Open Code, Preregistration
                     if not cleaned_p or cleaned_p.lower() == "none":
                         open_science_counter["None"] += 1
                     else:
-                        # 转成首字母大写便于统一聚合显示
                         title_p = cleaned_p.title()
                         if "Data" in title_p:
                             title_p = "Open Data"
@@ -212,7 +181,6 @@ class ProfileAggregator:
                             title_p = "Preregistration"
                         open_science_counter[title_p] += 1
         
-        # 计算百分比
         open_science_stats = {
             p_name: {
                 "count": cnt,
@@ -221,13 +189,12 @@ class ProfileAggregator:
             for p_name, cnt in open_science_counter.most_common()
         }
 
-        # 5c. 方法论审计：统计汇报风格分布统计 (Statistical Reporting Style)
+        # 5c. 统计汇报风格统计
         reporting_styles = []
         for f in features_list:
             style = f.get("statistical_reporting_style", "None")
             if style and style.strip().lower() != "none":
                 style_clean = style.strip()
-                # 简单清洗聚合
                 if "p-value" in style_clean.lower() or "p value" in style_clean.lower():
                     reporting_styles.append("Significance Testing (P-values)")
                 elif "bootstrap" in style_clean.lower() or "mediation" in style_clean.lower():
@@ -241,7 +208,7 @@ class ProfileAggregator:
         
         top_reporting_styles = Counter(reporting_styles).most_common(5)
 
-        # 6. 挑选中近期被引次最高、具代表性的论文创新点金句作为示范 (Top 5)
+        # 6. 被引频次最高的代表性论文 (Top 5)
         sorted_by_citations = sorted(
             features_list, key=lambda x: x.get("cited_by_count", 0), reverse=True
         )
@@ -255,21 +222,27 @@ class ProfileAggregator:
             for item in sorted_by_citations[:5]
         ]
 
-        # 7. 基于余弦相似度，在大样本真实发表池中计算与用户当前论文草稿最相似的 Top 3 篇已发表标杆
+        # 7. 动态双表计算 (用户草稿传入时生效)
         most_similar_papers = []
+        recommended_references = []
+
         if user_draft_text and user_draft_text.strip():
             similarities = []
             use_semantic = HAS_SENTENCE_TRANSFORMERS
             
+            # 使用 sentence-transformers 计算高维编码
             if use_semantic:
                 try:
-                    logger.info("检测到 sentence-transformers，正在使用 all-MiniLM-L6-v2 进行高精度语义向量化对标...")
-                    # 仅在需要时延迟初始化模型，节省开销
+                    logger.info("正在初始化 SentenceTransformer ('all-MiniLM-L6-v2') 提取语义特征对标向量...")
                     model = SentenceTransformer('all-MiniLM-L6-v2')
+                    draft_emb = model.encode(user_draft_text, convert_to_tensor=True)
                     
-                    paper_contents = []
-                    papers_mapping = []
+                    os.makedirs("cache", exist_ok=True)
                     for f in features_list:
+                        paper_id_clean = f.get("paper_id") or f.get("title", "")
+                        paper_hash = hashlib.md5(paper_id_clean.encode("utf-8")).hexdigest()[:12]
+                        emb_cache_file = os.path.join("cache", f"embedding_{paper_hash}.json")
+                        
                         semantic_elements = [
                             f.get("title", ""),
                             f.get("abstract", ""),
@@ -278,23 +251,34 @@ class ProfileAggregator:
                             " ".join(f.get("concepts", [])),
                         ]
                         content = " ".join([elem for elem in semantic_elements if elem]).strip()
-                        paper_contents.append(content)
-                        papers_mapping.append(f)
-                    
-                    # 提取语义编码并计算相似度
-                    draft_emb = model.encode(user_draft_text, convert_to_tensor=True)
-                    papers_embs = model.encode(paper_contents, convert_to_tensor=True)
-                    cos_scores = util.cos_sim(draft_emb, papers_embs)[0]
-                    
-                    for idx, score in enumerate(cos_scores):
-                        similarities.append((float(score), papers_mapping[idx]))
+                        
+                        paper_emb = None
+                        if os.path.exists(emb_cache_file):
+                            try:
+                                with open(emb_cache_file, "r") as fec:
+                                    paper_emb_list = json.load(fec)
+                                import torch
+                                paper_emb = torch.tensor(paper_emb_list).to(draft_emb.device)
+                            except Exception as e_emb_c:
+                                logger.warning(f"读取 embedding 缓存失败: {e_emb_c}")
+                                
+                        if paper_emb is None:
+                            paper_emb_tensor = model.encode(content, convert_to_tensor=True)
+                            paper_emb = paper_emb_tensor
+                            try:
+                                with open(emb_cache_file, "w") as fec:
+                                    json.dump(paper_emb_tensor.tolist(), fec)
+                            except Exception as e_w_emb_c:
+                                logger.warning(f"写入 embedding 缓存失败: {e_w_emb_c}")
+                                
+                        sim = float(util.cos_sim(draft_emb, paper_emb)[0][0])
+                        similarities.append((sim, f))
                 except Exception as e_sem:
-                    logger.warning(f"使用 sentence-transformers 进行语义对标失败，将降级为词频余弦对标: {e_sem}")
+                    logger.warning(f"使用 sentence-transformers 对标异常，将降级为词频余弦对标: {e_sem}")
                     use_semantic = False
             
             if not use_semantic:
                 for f in features_list:
-                    # 将标题、摘要、理论构念、分析工具与 OpenAlex 概念关键词融合，构建高维度语义向量文本
                     semantic_elements = [
                         f.get("title", ""),
                         f.get("abstract", ""),
@@ -306,7 +290,7 @@ class ProfileAggregator:
                     sim = ProfileAggregator.calculate_cosine_similarity(user_draft_text, paper_content)
                     similarities.append((sim, f))
             
-            # 按相似度降序排列
+            # --- 列表 1：诊断差距的最相似 Top 3 标杆文献 (Strictly sorted by similarity) ---
             similarities.sort(key=lambda x: x[0], reverse=True)
             for sim, f in similarities[:3]:
                 most_similar_papers.append({
@@ -322,6 +306,47 @@ class ProfileAggregator:
                     "concepts": f.get("concepts", [])
                 })
 
+            # --- 列表 2：最强学术增补推荐引用 Top 5 文献 (Code-Driven Weighted Formula) ---
+            max_citations = max([f.get("cited_by_count", 0) for f in features_list]) if features_list else 0
+            
+            scored_papers = []
+            draft_words = set(re.sub(r"\W+", " ", user_draft_text.lower()).split())
+            
+            for sim, f in similarities:
+                # 1. 被引分 (max-min scale)
+                cit_score = (f.get("cited_by_count", 0) / max_citations) if max_citations > 0 else 0.0
+                
+                # 2. 新鲜度分
+                diff = current_year - f.get("publication_year", current_year)
+                recency_score = max(0.2, 1.0 - diff * 0.2)
+                
+                # 3. 关键词重合度分
+                paper_words = set()
+                for c in f.get("concepts", []):
+                    paper_words.update(re.sub(r"\W+", " ", c.lower()).split())
+                for t in f.get("theoretical_frameworks", []):
+                    paper_words.update(re.sub(r"\W+", " ", t.lower()).split())
+                overlap = len(draft_words.intersection(paper_words))
+                keyword_overlap_score = min(overlap / 5.0, 1.0)
+                
+                # 加权打分公式
+                final_score = 0.45 * sim + 0.25 * cit_score + 0.20 * recency_score + 0.10 * keyword_overlap_score
+                scored_papers.append((final_score, sim, f))
+            
+            # 按最终得分降序排序，取前 5 篇作为推荐引用
+            scored_papers.sort(key=lambda x: x[0], reverse=True)
+            for score, sim, f in scored_papers[:5]:
+                recommended_references.append({
+                    "title": f.get("title", ""),
+                    "final_score": round(score, 3),
+                    "similarity_score": round(sim, 3),
+                    "publication_year": f.get("publication_year", current_year),
+                    "cited_by_count": f.get("cited_by_count", 0),
+                    "theoretical_frameworks": f.get("theoretical_frameworks", []),
+                    "analytical_tools": f.get("analytical_tools", []),
+                    "concepts": f.get("concepts", [])
+                })
+
         aggregated_data = {
             "total_papers_analyzed": total_count,
             "method_distribution": method_distribution,
@@ -333,7 +358,8 @@ class ProfileAggregator:
             "top_reporting_styles": [{"style": style, "count": cnt} for style, cnt in top_reporting_styles],
             "representative_novelties": representative_novelties,
             "most_similar_papers": most_similar_papers,
+            "recommended_references": recommended_references
         }
 
-        logger.info(f"统计与对标相似度聚合计算完成。最相似文献匹配数: {len(most_similar_papers)}")
+        logger.info(f"统计与对标相似度聚合计算完成。对标标杆文献: {len(most_similar_papers)} 篇，推荐引用文献: {len(recommended_references)} 篇。")
         return aggregated_data

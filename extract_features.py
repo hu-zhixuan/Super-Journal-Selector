@@ -1,5 +1,7 @@
+import os
 import json
 import logging
+import hashlib
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from tqdm import tqdm
@@ -51,8 +53,26 @@ class FeatureExtractor:
 
     def extract_paper(self, paper: PaperRecord) -> Optional[ExtractedFeatures]:
         """
-        对单篇论文摘要调用 LLM 执行信息抽取
+        对单篇论文摘要调用 LLM 执行信息抽取，内置本地特征缓存层以节省 API Token 成本。
         """
+        paper_id_clean = paper.id or paper.doi or "unknown"
+        paper_hash = hashlib.md5(paper_id_clean.encode("utf-8")).hexdigest()[:12]
+        prompt_version = "v2"
+        cache_dir = "cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, f"feature_{paper_hash}_{prompt_version}.json")
+
+        # 检查本地缓存
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    raw_json = json.load(f)
+                raw_json["paper_id"] = paper_id_clean
+                feature_obj = ExtractedFeatures.model_validate(raw_json)
+                return feature_obj
+            except Exception as e_cache:
+                logger.warning(f"读取论文特征缓存失败: {e_cache}")
+
         prompt = f"""
 You are an expert academic research reviewer. Read the following paper title and abstract carefully, then extract key methodological and theoretical features into valid JSON format matching the schema below.
 
@@ -73,9 +93,16 @@ Output MUST be clean valid JSON only without extra conversational markdown.
 """
         try:
             raw_json = self.llm.call_json(prompt=prompt)
-            # 将原始 paper_id 注入并校验
-            raw_json["paper_id"] = paper.id or paper.doi or "unknown"
+            raw_json["paper_id"] = paper_id_clean
             feature_obj = ExtractedFeatures.model_validate(raw_json)
+
+            # 保存至缓存
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(feature_obj.model_dump(), f, ensure_ascii=False, indent=2)
+            except Exception as e_w_cache:
+                logger.warning(f"写入论文特征缓存文件失败: {e_w_cache}")
+
             return feature_obj
         except Exception as e:
             logger.warning(f"论文 [{paper.title[:30]}...] 特征抽取出现异常: {str(e)}")
@@ -91,8 +118,7 @@ Output MUST be clean valid JSON only without extra conversational markdown.
         def process_one(p: PaperRecord) -> Optional[Dict[str, Any]]:
             import time
             import random
-            # 引入随机小延迟以错开并发峰值，减缓 API 接口 Rate Limit 频率限制压力
-            time.sleep(random.uniform(0.1, 0.8))
+            time.sleep(random.uniform(0.05, 0.4))
             
             feat = self.extract_paper(p)
             if feat:

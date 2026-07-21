@@ -22,22 +22,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # ==================== Socket 层 DNS 劫持补丁 ====================
-DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
-DISABLE_DNS_PATCH = os.getenv("DISABLE_DNS_PATCH", "false").lower() == "true"
-
-def patched_create_connection(address, *args, **kwargs):
-    host, port = address
-    if host == "fxb.supa.net.cn" and not DISABLE_DNS_PATCH and DEFAULT_DIRECT_IP:
-        return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
-    return urllib3_cn._orig_create_connection(address, *args, **kwargs)
-
-if not hasattr(urllib3_cn, "_orig_create_connection"):
-    urllib3_cn._orig_create_connection = urllib3_cn.create_connection
-    urllib3_cn.create_connection = patched_create_connection
-    if DISABLE_DNS_PATCH:
-        logger.info("已关闭 Socket DNS 直连补丁")
-    elif DEFAULT_DIRECT_IP:
-        logger.info(f"已成功加载 Socket DNS 直连补丁：fxb.supa.net.cn -> {DEFAULT_DIRECT_IP}")
+from llm_client import install_dns_patch
+install_dns_patch()
 # ===============================================================
 
 

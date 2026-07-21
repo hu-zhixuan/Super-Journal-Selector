@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import re
 from typing import Dict, Any, Optional
 from llm_client import LLMClient
 
@@ -9,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 class ProfileGenerator:
     """
-    层④：战略生成层。将层③输出的统计特征、本地对标出来的 Top 3 相似文献、用户待投稿文本，
-    拼装为严格“数据表格+极简证据批注”的循证诊断报告。拒绝散文腔调，每句话都必须拿真实论文举证。
+    层④：战略生成层。将层③输出的统计特征、本地对标出来的 Top 3 相似文献、Top 5 推荐引用文献以及用户草稿，
+    拼装为“数据表格+极简证据批注”的循证诊断报告。
     """
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
@@ -24,7 +25,7 @@ class ProfileGenerator:
         user_draft_text: Optional[str] = None,
     ) -> str:
         """
-        基于量化统计、官方指标及相似文献对比，生成高确定性、表格化的对标报告。
+        基于量化统计、官方指标及相似文献对比，生成高确定性、表格化的对标报告，并自动运行 Citation Validator 进行引用强校验。
         """
         logger.info(f"正在为期刊 '{journal_name}' 撰写循证诊断对比报告...")
 
@@ -43,6 +44,10 @@ class ProfileGenerator:
 ### 【近年发表的 Top 3 最相似文献特征（由 Layer ③ Cosine Similarity 算法计算得出）】
 请直接使用这 3 篇真实文献的数据与用户的草稿进行深度维度对比：
 {json.dumps(aggregated_stats.get("most_similar_papers", []), ensure_ascii=False, indent=2)}
+
+### 【近年高契合度推荐引用文献列表（由 Layer ③ 代码打分排序生成，禁止编造）】
+以下文献是由代码公式计算出的最适合引用并用来增强你论文的文献，请直接对这 5 篇文献进行点评并说明建议引用理由：
+{json.dumps(aggregated_stats.get("recommended_references", []), ensure_ascii=False, indent=2)}
 """
         else:
             user_draft_section = """
@@ -67,16 +72,19 @@ class ProfileGenerator:
 因为我们的指标由大样本聚类算得，你必须充分展现对该刊小同行隐形偏好、真实样本门槛与理论执念的精确洞察！
 
 【🔴 极其严厉的输出控制规范】：
-1. **必须每句有据且具有极致特殊指向性**：不准泛泛而谈或使用通用套话。提示词中提供的所有结论，凡是涉及到该期刊的方法偏好、样本底线、理论构念、狙击盲区的判定，**必须在话术中明确用 `《论文标题》` 引用聚合指标里存在的真实文献作为实证！禁止凭空编造证据！**
+1. **必须每句有据且具有极致特殊指向性**：不准泛泛而谈或使用通用套话。提示词中提供的所有结论，凡是涉及到该期刊的方法偏好、样本底线、理论构念、修稿盲区的判定，**必须在话术中明确用 `《论文标题》` 引用提供给你的真实文献作为实证！禁止凭空编造或幻想任何文献！**
 2. **必须看板化呈现**：拒绝长篇大论的“AI 抒情散文”。必须采用 **“数据表格 + 极简 bullet 点批注”** 的结构。批注要求一针见血，直指痛点。
-3. **必须包含以下三大核心部分**：
+3. **对标文献与推荐引用文献必须分开**：
+   * **Top 3 最相似文献**：用来进行稿件设计上的维度差距诊断；
+   * **Top 5 推荐引用文献**：用来增强文献综述和讨论部分，并提供具体的“建议引用理由”。你只能对输入给你的这 5 篇文献写建议，禁止捏造其它文献！
+4. **必须包含以下三大核心部分**：
 
 ---
 
 ## 一、 目标期刊选稿偏好与近期趋势客观看板 (Objective Preferences & Trend Dashboard)
 
 ### 0. 期刊基本学术属性与 JCR / 中科院分区表 (由本地权威数据映射)
-用单列表格或键值对表格呈现以下字段，数据请严格提取自 `metadata_json` 中的对应键值（切勿幻觉或编造）：
+用单列表格呈现以下字段，数据请严格提取自 `metadata_json` 中的对应键值（切勿幻觉或编造）：
 * 官方 ISSN、H-index 影响力指数、估算影响因子 (Estimated IF)。
 * 最新 **JCR 分区** (如 Q1, Q2，对应 `jcr_zone`)。
 * 最新 **中科院分区** (如 1区, 2区, 3区，对应 `cas_zone`，小类划分对应 `cas_sub_categories`，是否为 Top 期刊对应 `is_top`)。
@@ -88,7 +96,6 @@ class ProfileGenerator:
 ### 2. 理论框架、工具与样本门槛指标表 (Theories, Tools & Sample Thresholds)
 * 用表格形式呈现：排名前列的核心理论框架（Top Theories）、常用分析工具链（Top Tools）以及定量分析的样本规模区间（Median/Min/Max）。
 * **### 📌 指标解读批注**：用极简短的 2 行字说明样本与工具的隐形门槛。
-  特别注意：如果该刊为物理学或自然科学期刊且统计出的样本量中位数（Median Sample）极小（如 1 或 2），说明此非社会科学人头调查，而是实验器件样品、单晶体系或模型层数。请务必在批注中以高级审稿人身份明确对此范式差异做出科学合理解释，避免误导作者。
 
 ### 3. 开源科学实践与统计汇报规范底线 (Open Science & Statistical Norms Audit)
 * 根据 `stats_json` 中的 `open_science_stats` 用表格呈现数据开源（Open Data）与代码开源（Open Code）等实践在近年文章中的实际占比，判断该刊是否属于开源友好型期刊。
@@ -97,54 +104,104 @@ class ProfileGenerator:
 
 ---
 
-## 二、 【核心杀手锏】用户稿件 vs 近年最相似的 3 篇已发表文献深度对比矩阵 (Contrastive Diagnosis)
-*(若用户提供了草稿，请将草稿与 Layer ③ 算出的 3 篇相似文献做严格的矩阵对标；若未提供草稿，则与典型已发表论文做对比)*
+## 二、 【核心杀手锏】用户稿件 vs 近年最相似文献对标及推荐引用 (Contrastive Diagnosis)
 
 ### 1. 维度对比对标矩阵表
 请构建一个 Markdown 表格，对比以下列：
-`对标维度` | `你的论文草稿` | `相似文献1:《标题》 (IF/被引)` | `相似文献2:《标题》 (IF/被引)` | `相似文献3:《标题》 (IF/被引)`
-表格行必须包含：
-* **核心研究范式** (定量实证/定性案例/混合方法/理论推导/计算仿真)
-* **核心理论视角** (引入的理论框架与核心构念)
-* **样本规模与数据来源** (具体数据源与 N 的量级)
-* **核心分析工具与模型** (使用的计量模型、统计方法或机器学习工具)
-* **创新贡献定位** (如何向主编写故事/贡献点落脚处)
+`对标维度` | `你的论文草稿` | `相似文献1:《标题》` | `相似文献2:《标题》` | `相似文献3:《标题》`
+（注：相似文献请填入 `most_similar_papers` 中的 Top 3 论文）
 
-### 2. 🌟 稿件核心亮点与学术增量 (Objective Strengths & Contributions)
-请客观、不带偏见地指出用户的论文草稿相比于这 3 篇相似文献，有哪些**独特的长处、新颖视角或特定的应用价值**（例如：“作者引入了独特的调节效应”、“采用了更新颖的细分行业样本”、“在特定应用情境下具有更强的现实指导意义”等）。在诊断差距前，必须首先肯定这些学术亮点，保证评议的公正性。
+### 2. 🎯 推荐引用的本刊近年高契合度文献列表 (Top 5 Recommended References to Cite)
+请根据 `recommended_references` 中的 5 篇论文，构建一个表格：
+`序号` | `推荐论文标题` | `发表年份` | `总被引用数` | `最终匹配得分` | `建议引用理由`
+（注意：“建议引用理由”由你撰写，说明该论文如何能在论证逻辑、测量工具、或对照样本上帮助增强用户的论文）
 
-### 3. 🔍 审稿人视角：核心差距与局限性诊断 (Balanced Assessment of Gaps)
-请秉持**客观平衡、实事求是**的同行评议原则。请特别注意：**“差异不等于硬伤”**。如果作者的稿件在某些维度（如样本量大小、分析工具的选择）上虽与标杆文献有差异，但只要其设计在自身的研究情境下是合理、够用且自洽的，请客观指出其合理性，切勿无脑唱衰或为了挑刺而全盘否定。只有在确实存在方法论漏洞、样本量严重不足支撑模型、或理论增量极度匮乏时，才判定为“关键局限性”并给出修改方向。
+### 3. 🌟 稿件核心亮点与学术增量 (Objective Strengths & Contributions)
+请客观、不带偏见地指出用户的论文草稿相比于这 3 篇相似文献，有哪些独特的长处、新颖视角或特定的应用价值，保证评议的公正性。
+
+### 4. 🔍 审稿人视角：核心差距与局限性诊断 (Balanced Assessment of Gaps)
+客观指出其合理性，切勿无脑唱衰。只有在确实存在方法论漏洞、样本量严重不足支撑模型、或理论增量极度匮乏时，才判定为“关键局限性”并给出修改方向。
 
 ---
 
 ## 三、 【独家解密】审稿人关注焦点与防御性修稿策略 (Preemptive Defense)
 
 ### 1. ⏱️ 3分钟初审过滤器（AE 心中的关键评估项）
-用 3 句短话，列出主编在前 180 秒内扫描你的标题摘要、引言框架和核心方法时，最容易触发 Desk Reject 的几个**客观硬伤**（如研究问题过时、理论贡献陈述不清等），提供客观警示。
+用 3 句短话，列出主编在前 180 秒内扫描你的标题摘要、引言框架和核心方法时，最容易触发 Desk Reject 的几个客观硬伤。
 
 ### 2. 🛡️ 投稿前防御性修改方案 (Actionable Defenses)
-针对第二部分发现的核心差距，给出**切实可行的防御性修改建议**：
-* 给出具体的修改前（Before） vs 修改后（After）的标题、摘要或论证句式示例。
-* 指明如何通过补充实验、细化方法描述、或在讨论部分合理增加限制说明（Limitation）来堵住审稿人的质疑，帮助稿件达到录用门槛。
+针对第二部分发现的核心差距，给出切实可行的防御性修改建议，并给出修改前（Before） vs 修改后（After）的标题、摘要或论证句式示例。
 """
 
         system_prompt = (
             "You are a fair, objective, and highly constructive Associate Editor. "
             "You write highly structured, evidence-backed diagnostic reports featuring data tables and professional, balanced academic advice in Chinese. "
             "You aim to point out real gaps based on empirical statistics while offering actionable paths for revision. "
-            "Do not over-criticize; recognize the manuscript's unique strengths and ensure your critique is realistic and balanced. Every claim you make is proved by citing a real paper title."
+            "Do not over-criticize; recognize the manuscript's unique strengths and ensure your critique is realistic and balanced. "
+            "Every claim you make is proved by citing a real paper title."
         )
 
         try:
             report_content = self.llm.call(
                 prompt=prompt,
                 system_prompt=system_prompt,
-                temperature=0.18, # 极低温度，防止大模型自由编造散文
+                temperature=0.15,  # 极低温度控制，抑制捏造幻觉
                 max_retries=3,
             )
-            logger.info("对标诊断报告生成完毕。")
-            return report_content
+            
+            # 运行 Citation Validator 引用校验器进行强制审查
+            validated_report = self.validate_citations(report_content, aggregated_stats)
+            logger.info("对标诊断报告生成并完成引用校验。")
+            return validated_report
         except Exception as e:
             logger.error(f"生成报告异常: {str(e)}")
             raise
+
+    def validate_citations(self, report_markdown: str, aggregated_stats: Dict[str, Any]) -> str:
+        """
+        Citation Validator (引用校验器)：
+        使用归一化匹配技术，自动审查大模型生成的正文中所有被《书名号》包裹的文献。
+        若发现数据库中不存在该论文，则自动追加警告标签，拒绝盲目硬替换。
+        """
+        valid_titles = set()
+        
+        # 收集所有真实存在的论文标题作为校验白名单
+        all_raw_papers = (
+            aggregated_stats.get("most_similar_papers", []) +
+            aggregated_stats.get("recommended_references", []) +
+            aggregated_stats.get("representative_novelties", [])
+        )
+        for p in all_raw_papers:
+            if "title" in p:
+                valid_titles.add(p["title"])
+
+        def normalize_title(t: str) -> str:
+            return re.sub(r"\W+", " ", t.lower()).strip()
+
+        normalized_valid_titles = {normalize_title(t): t for t in valid_titles if t}
+
+        # 匹配 markdown 中所有被《书名号》包裹的内容
+        found_titles = re.findall(r"《(.*?)》", report_markdown)
+        
+        replaced_markdown = report_markdown
+        for ft in set(found_titles):
+            ft_norm = normalize_title(ft)
+            if not ft_norm:
+                continue
+
+            # 模糊匹配：如果提取的标题长度适中，且与白名单中的任一归一化标题满足子串包含关系，则判断为通过
+            matched = False
+            for vt_norm, vt_orig in normalized_valid_titles.items():
+                if ft_norm == vt_norm or (len(ft_norm) > 15 and (ft_norm in vt_norm or vt_norm in ft_norm)):
+                    matched = True
+                    break
+
+            if not matched:
+                logger.warning(f"⚠️ 校验器检测到未验证引用：《{ft}》")
+                # 在书名号后插入显式警告符号，避免直接硬替换导致学术指代偏离
+                replaced_markdown = replaced_markdown.replace(
+                    f"《{ft}》",
+                    f"《{ft}》`[⚠️ Unverified Reference]`"
+                )
+                
+        return replaced_markdown

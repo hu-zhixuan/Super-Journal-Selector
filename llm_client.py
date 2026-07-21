@@ -2,51 +2,65 @@ import os
 import json
 import re
 import time
+import random
 import logging
 import requests
 import urllib3.util.connection as urllib3_cn
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 # ==================== Socket 层 DNS 劫持补丁 ====================
-# 让 requests 建立连接时，强行把 fxb.supa.net.cn 映射到指定 IP (默认 114.80.15.146)
-# 但保留真实的域名作为 SNI 和 Host，实现完美握手并绕过 Fake-IP
+ENABLE_LLM_DNS_PATCH = os.getenv("ENABLE_LLM_DNS_PATCH", "false").lower() == "true"
 DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
-DISABLE_DNS_PATCH = os.getenv("DISABLE_DNS_PATCH", "false").lower() == "true"
 
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
-    if host == "fxb.supa.net.cn" and not DISABLE_DNS_PATCH and DEFAULT_DIRECT_IP:
+    if host == "fxb.supa.net.cn" and DEFAULT_DIRECT_IP:
         # 强制将连接导向物理 IP，实现分流直连
         return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
     return urllib3_cn._orig_create_connection(address, *args, **kwargs)
 
-if not hasattr(urllib3_cn, "_orig_create_connection"):
-    urllib3_cn._orig_create_connection = urllib3_cn.create_connection
-    urllib3_cn.create_connection = patched_create_connection
-    if DISABLE_DNS_PATCH:
-        logger.info("已关闭 Socket DNS 直连补丁")
-    elif DEFAULT_DIRECT_IP:
-        logger.info(f"已成功加载 Socket DNS 直连补丁：fxb.supa.net.cn -> {DEFAULT_DIRECT_IP}")
+def install_dns_patch():
+    """
+    显式安装 Socket 层 DNS 直连补丁。
+    默认由环境变量 ENABLE_LLM_DNS_PATCH 控制。
+    """
+    if ENABLE_LLM_DNS_PATCH:
+        if not hasattr(urllib3_cn, "_orig_create_connection"):
+            urllib3_cn._orig_create_connection = urllib3_cn.create_connection
+            urllib3_cn.create_connection = patched_create_connection
+            logger.info(f"已成功加载 Socket DNS 直连补丁：fxb.supa.net.cn -> {DEFAULT_DIRECT_IP}")
+    else:
+        logger.info("Socket DNS 直连补丁处于关闭状态（按需开启）")
+
+# 执行初始化补丁检查
+install_dns_patch()
 # ===============================================================
 
 
 class LLMClient:
     """
     统一封装的 LLM 客户端，适配 Anthropic Messages API 格式 (/v1/messages)。
-    使用 Socket 劫持补丁直接突破 Fake-IP 与 SNI 匹配困境。
+    支持 requests.Session 连接池复用、超时及最大 token 可配置、JSON 解析重试修复。
     """
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None, model: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: Optional[str] = None,
+        timeout: int = 60,
+        max_tokens: int = 4000
+    ):
         self.api_key = api_key or os.getenv("LLM_API_KEY")
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://fxb.supa.net.cn:6443")
         self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
+        self.timeout = timeout
+        self.max_tokens = max_tokens
 
         # 规范化 Base URL 路径
         self.url = self.base_url.rstrip("/")
@@ -55,6 +69,15 @@ class LLMClient:
 
         if not self.api_key or self.api_key == "your_api_key_here":
             logger.warning("未检测到有效的 LLM_API_KEY。若调用 API 将导致鉴权失败，请在 .env 中正确配置。")
+
+        # 使用 Session 连接池复用，提升批量请求效率
+        self.session = requests.Session()
+        self.session.trust_env = False
+        # 强行忽略系统代理环境变量
+        self.session.proxies = {
+            "http": None,
+            "https": None
+        }
 
     def call(
         self,
@@ -74,7 +97,7 @@ class LLMClient:
 
         payload = {
             "model": self.model,
-            "max_tokens": 4000,
+            "max_tokens": self.max_tokens,
             "temperature": temperature,
             "system": system_prompt,
             "messages": [
@@ -82,43 +105,49 @@ class LLMClient:
             ]
         }
 
-        # 强行忽略系统代理环境变量
-        direct_proxies = {
-            "http": None,
-            "https": None
-        }
-
         for attempt in range(1, max_retries + 1):
             try:
                 # 此时因为有底层的 socket 补丁，直接使用真实的 https 域名访问即可！
-                # 既解决了 Fake-IP 劫持，又保留了合法的 SNI，还支持标准的证书验证
-                response = requests.post(
+                response = self.session.post(
                     self.url,
                     headers=headers,
                     json=payload,
-                    proxies=direct_proxies,
-                    timeout=60
+                    timeout=self.timeout
                 )
                 response.raise_for_status()
                 
                 resp_data = response.json()
-                content_list = resp_data.get("content", [])
-                if content_list and len(content_list) > 0:
-                    text_content = content_list[0].get("text", "")
-                    return text_content
                 
-                logger.error(f"API 响应结构异常: {resp_data}")
-                raise ValueError("Anthropic API 返回内容为空")
+                # 警告输出截断
+                if resp_data.get("stop_reason") == "max_tokens":
+                    logger.warning("LLM 输出被 max_tokens 截断，可能导致后续 JSON 或文本内容解析不全。")
+
+                content_list = resp_data.get("content", [])
+                text_parts = [
+                    block.get("text", "")
+                    for block in content_list
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ]
+                text = "".join(text_parts).strip()
+                if not text:
+                    logger.error(f"API 响应结构异常，文本内容为空: {resp_data}")
+                    raise ValueError("Anthropic API 返回内容为空")
+                return text
 
             except Exception as e:
-                # 检查是否为 HTTP 429 速率限制错误并进行友好提示
                 is_rate_limit = False
-                try:
-                    if hasattr(e, "response") and e.response is not None:
-                        if getattr(e.response, "status_code", None) == 429:
-                            is_rate_limit = True
-                except Exception:
-                    pass
+                wait_time = 0
+                
+                # 检查是否为 HTTP 429 速率限制错误，并读取 Retry-After 头
+                if hasattr(e, "response") and e.response is not None:
+                    if getattr(e.response, "status_code", None) == 429:
+                        is_rate_limit = True
+                        retry_after = e.response.headers.get("Retry-After")
+                        if retry_after:
+                            try:
+                                wait_time = int(retry_after)
+                            except ValueError:
+                                pass
 
                 if is_rate_limit:
                     logger.warning(f"触发 API 频率限制 (HTTP 429) (尝试 {attempt}/{max_retries})，正在执行退避重试...")
@@ -126,13 +155,53 @@ class LLMClient:
                     logger.warning(f"LLM API 接入调用失败 (尝试 {attempt}/{max_retries}): {str(e)}")
 
                 if attempt == max_retries:
-                    raise
-                import random
-                sleep_time = (2 ** attempt) + random.uniform(0.5, 2.0)
-                if is_rate_limit:
+                    raise RuntimeError(f"All LLM API retry attempts failed. Last error: {e}") from e
+
+                # 避让逻辑
+                sleep_time = wait_time if wait_time > 0 else (2 ** attempt) + random.uniform(0.5, 2.0)
+                if is_rate_limit and wait_time == 0:
                     sleep_time += 3.0  # 针对频率限制额外延长等待时间
+                
+                logger.info(f"等待 {sleep_time:.2f} 秒后重试...")
                 time.sleep(sleep_time)
-        return ""
+
+        raise RuntimeError("All LLM API retry attempts failed")
+
+    def extract_json_from_text(self, raw_output: str) -> Dict[str, Any]:
+        """
+        强力提取文本中的 JSON 部分，支持 markdown、object 和 array。
+        """
+        candidates = []
+
+        # 1. 优先提取 markdown 代码块
+        code_block = re.search(r"```(?:json)?\s*(.*?)\s*```", raw_output, re.DOTALL)
+        if code_block:
+            candidates.append(code_block.group(1))
+
+        # 2. 匹配可能的对象 `{...}` 贪婪与非贪婪最大区间
+        obj_start = raw_output.find("{")
+        obj_end = raw_output.rfind("}")
+        if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
+            candidates.append(raw_output[obj_start:obj_end + 1])
+
+        # 3. 匹配可能的数组 `[...]` 最大区间
+        arr_start = raw_output.find("[")
+        arr_end = raw_output.rfind("]")
+        if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
+            candidates.append(raw_output[arr_start:arr_end + 1])
+
+        # 4. 尝试直接解析全文
+        candidates.append(raw_output)
+
+        for candidate in candidates:
+            try:
+                candidate_str = candidate.strip()
+                if candidate_str:
+                    return json.loads(candidate_str)
+            except json.JSONDecodeError:
+                continue
+
+        raise ValueError("LLM 返回内容中不包含任何合法的 JSON 结构")
 
     def call_json(
         self,
@@ -142,7 +211,7 @@ class LLMClient:
         max_retries: int = 3,
     ) -> Dict[str, Any]:
         """
-        请求并强力解析 JSON 输出，内置对 Markdown 代码块的正则清洗容错。
+        请求并强力解析 JSON 输出，内置 JSON 损坏自动重试修复机制。
         """
         raw_output = self.call(
             prompt=prompt,
@@ -152,23 +221,25 @@ class LLMClient:
         )
 
         try:
-            return json.loads(raw_output)
-        except json.JSONDecodeError:
-            pass
+            return self.extract_json_from_text(raw_output)
+        except ValueError as e:
+            logger.warning(f"首次 JSON 解析失败: {e}。触发大模型自我修复调用...")
+            repair_prompt = f"""
+你上一次返回的输出内容不符合合法的 JSON 格式。
+错误解析提示: {str(e)}
 
-        json_match = re.search(r"```(?:json)?\s*(\{.*\}|\[.*\])\s*```", raw_output, re.DOTALL)
-        if json_match:
+请仔细修改，只返回合法的 JSON 对象或数组。不要输出任何解释文字，也不要使用 markdown 语法包裹。
+你上一次返回的原始输出如下:
+{raw_output}
+"""
             try:
-                return json.loads(json_match.group(1))
-            except json.JSONDecodeError:
-                pass
-
-        bracket_match = re.search(r"(\{.*\})", raw_output, re.DOTALL)
-        if bracket_match:
-            try:
-                return json.loads(bracket_match.group(1))
-            except json.JSONDecodeError:
-                pass
-
-        logger.error(f"无法从 LLM 返回内容中解析出有效 JSON:\n{raw_output[:500]}...")
-        raise ValueError("LLM 返回结构不符合 JSON 格式约束")
+                repaired_output = self.call(
+                    prompt=repair_prompt,
+                    system_prompt=system_prompt,
+                    temperature=temperature,
+                    max_retries=max_retries,
+                )
+                return self.extract_json_from_text(repaired_output)
+            except Exception as e_repair:
+                logger.error(f"大模型自我修复 JSON 失败: {e_repair}")
+                raise ValueError(f"大模型自我修复 JSON 失败: {e_repair}") from e_repair
