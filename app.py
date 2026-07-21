@@ -293,14 +293,6 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
 
 
 # ==================== GRADIO 网页界面布局 ====================
-theme = gr.themes.Soft(
-    primary_hue="indigo",
-    secondary_hue="blue",
-    neutral_hue="slate",
-).set(
-    button_primary_background_fill="*primary_500",
-    button_primary_background_fill_hover="*primary_600",
-)
 
 
 def chat_with_reviewer(message: str, history: list, report_text: str):
@@ -413,120 +405,232 @@ def run_journal_router(router_draft_text: str, router_file_obj: Any, main_draft_
 
 
 custom_css = """
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ===== Global Background & Typography ===== */
 body, .gradio-container {
-    background-color: #0b0f19 !important;
-    background-image: radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 45%),
-                      radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 45%) !important;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    color: #e2e8f0 !important;
+    background-color: #f8fafc !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    color: #1e293b !important;
 }
 
+/* ===== Hero Banner ===== */
 .hero-banner {
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.85)) !important;
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 16px !important;
-    padding: 24px 32px !important;
-    margin-bottom: 20px !important;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 32px 40px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .hero-title {
-    font-size: 2.2rem !important;
-    font-weight: 800 !important;
-    background: linear-gradient(135deg, #60a5fa 0%, #c084fc 100%) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    margin-bottom: 6px !important;
-    letter-spacing: -0.02em !important;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
 }
 
 .hero-subtitle {
-    color: #94a3b8 !important;
-    font-size: 1rem !important;
-    font-weight: 400 !important;
+    color: #64748b;
+    font-size: 0.95rem;
+    font-weight: 400;
+    line-height: 1.5;
 }
 
-.gr-button-primary, button.primary-btn {
-    background: linear-gradient(135deg, #3b82f6 0%, #7c3aed 100%) !important;
+/* ===== Buttons ===== */
+.gr-button-primary, button.primary {
+    background: #4f46e5 !important;
     border: none !important;
     color: #ffffff !important;
     font-weight: 600 !important;
-    font-size: 1rem !important;
-    border-radius: 10px !important;
-    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.35) !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
-
-.gr-button-primary:hover, button.primary-btn:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 30px rgba(124, 58, 237, 0.5) !important;
-}
-
-.tab-nav button, div.tab-nav button {
+    font-size: 0.9rem !important;
     border-radius: 8px !important;
-    font-weight: 600 !important;
-    color: #94a3b8 !important;
+    padding: 10px 20px !important;
+    box-shadow: 0 1px 2px rgba(79, 70, 229, 0.2) !important;
     transition: all 0.2s ease !important;
 }
 
+.gr-button-primary:hover, button.primary:hover {
+    background: #4338ca !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
+}
+
+/* ===== Tabs ===== */
+.tab-nav button, div.tab-nav button {
+    font-weight: 500 !important;
+    color: #64748b !important;
+    border-radius: 6px !important;
+    padding: 8px 16px !important;
+    transition: all 0.15s ease !important;
+}
+
 .tab-nav button.selected, div.tab-nav button.selected {
-    background: rgba(59, 130, 246, 0.18) !important;
-    color: #38bdf8 !important;
-    border-bottom: 2px solid #38bdf8 !important;
+    background: #eef2ff !important;
+    color: #4f46e5 !important;
+    border-bottom: 2px solid #4f46e5 !important;
+    font-weight: 600 !important;
 }
 
-.markdown-body table {
+/* ===== Cards & Panels ===== */
+.gr-panel, .gr-box, div[data-testid="column"] {
+    border-radius: 10px !important;
+}
+
+/* ===== Inputs ===== */
+.gr-input, .gr-text-input, textarea, input[type="text"] {
+    border: 1px solid #d1d5db !important;
+    border-radius: 8px !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.gr-input:focus, .gr-text-input:focus, textarea:focus, input[type="text"]:focus {
+    border-color: #4f46e5 !important;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
+    outline: none !important;
+}
+
+/* ===== Tables ===== */
+.markdown-body table, .prose table {
     width: 100% !important;
-    border-collapse: separate !important;
-    border-spacing: 0 !important;
-    border-radius: 12px !important;
+    border-collapse: collapse !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
     overflow: hidden !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     margin: 16px 0 !important;
+    font-size: 0.875rem !important;
 }
 
-.markdown-body th {
-    background: rgba(30, 41, 59, 0.9) !important;
-    color: #38bdf8 !important;
+.markdown-body th, .prose th {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
     font-weight: 600 !important;
     padding: 12px 16px !important;
+    text-align: left !important;
+    border-bottom: 1px solid #e2e8f0 !important;
 }
 
-.markdown-body td {
-    background: rgba(15, 23, 42, 0.6) !important;
-    padding: 12px 16px !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+.markdown-body td, .prose td {
+    padding: 10px 16px !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    color: #475569 !important;
+}
+
+.markdown-body tr:nth-child(even) td, .prose tr:nth-child(even) td {
+    background: #f8fafc !important;
+}
+
+/* ===== Chatbot ===== */
+.gr-chatbot, [data-testid="chatbot"] {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    background: #ffffff !important;
+}
+
+/* ===== Status Box ===== */
+.status-box textarea {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #475569 !important;
+    font-size: 0.85rem !important;
+}
+
+/* ===== Sliders ===== */
+.gr-slider .slider-input {
+    accent-color: #4f46e5 !important;
+}
+
+/* ===== File Upload ===== */
+.gr-file-upload, [data-testid="file"] {
+    border: 2px dashed #d1d5db !important;
+    border-radius: 10px !important;
+    background: #fafbfc !important;
+    transition: border-color 0.2s ease !important;
+}
+
+.gr-file-upload:hover, [data-testid="file"]:hover {
+    border-color: #4f46e5 !important;
+}
+
+/* ===== Markdown Output ===== */
+.markdown-body, .prose {
+    color: #334155 !important;
+    line-height: 1.7 !important;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    color: #1e293b !important;
+    font-weight: 700 !important;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 """
 
-with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=gr.themes.Soft(primary_hue="blue", neutral_hue="slate")) as demo:
+app_theme = gr.themes.Soft(
+    primary_hue="indigo",
+    secondary_hue="slate",
+    neutral_hue="slate",
+    font=gr.themes.GoogleFont("Inter"),
+).set(
+    body_background_fill="#f8fafc",
+    block_background_fill="#ffffff",
+    block_border_width="1px",
+    block_border_color="#e2e8f0",
+    block_radius="10px",
+    button_primary_background_fill="#4f46e5",
+    button_primary_background_fill_hover="#4338ca",
+    button_primary_text_color="#ffffff",
+    button_secondary_background_fill="#f1f5f9",
+    button_secondary_background_fill_hover="#e2e8f0",
+    input_background_fill="#ffffff",
+    input_border_color="#d1d5db",
+    input_border_color_focus="#4f46e5",
+)
+
+with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=app_theme) as demo:
     gr.HTML(
         """
         <div class="hero-banner">
-            <div class="hero-title">📊 期刊选稿画像助手 (Journal Profile Assistant)</div>
-            <div class="hero-subtitle">百篇大样本驱动的学术品味诊断、全网多期刊智能路由与投稿死穴预测大盘 —— 书生·浦砚 AI4SS 自由赛道参赛作品</div>
+            <div class="hero-title">期刊选稿画像助手</div>
+            <div class="hero-subtitle">百篇大样本驱动的学术品味诊断、全网多期刊智能路由与投稿策略系统</div>
         </div>
         """
     )
 
     with gr.Tabs():
-        with gr.Tab("📊 选稿画像与循证诊断"):
+        with gr.Tab("选稿画像与循证诊断"):
             with gr.Row():
                 # 左侧输入控制区
-                with gr.Column(scale=2):
-                    gr.Markdown("### ⚙️ 投稿对标参数配置")
+                with gr.Column(scale=2, min_width=380):
+                    gr.Markdown("### 投稿对标参数配置")
                     
                     search_input = gr.Textbox(
-                        label="🔍 输入期刊关键词进行联想（输入3个字母以上自动检索）",
+                        label="输入期刊关键词进行联想（输入 2 个字母以上自动检索）",
                         placeholder="例如: computers 或 strategic",
                         value=""
                     )
                     
                     journal_input = gr.Dropdown(
-                        label="🎯 选择目标期刊全称 (从下方匹配的候选列表中选择)",
+                        label="选择目标期刊全称",
                         choices=["Computers in Human Behavior"],
                         value="Computers in Human Behavior",
                         allow_custom_value=True,
@@ -544,65 +648,66 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=g
                         )
                         
                     # 输入方式卡片：提供粘贴文本和文件上传两种选择
-                    with gr.Tab("📝 选项 A：手动粘贴摘要/草稿"):
+                    with gr.Tab("粘贴摘要/草稿"):
                         draft_input = gr.Textbox(
-                            label="粘贴拟投稿论文的 Title/Abstract/大纲",
-                            placeholder="在此粘贴，系统将给出字面级的手术重构方案...",
+                            label="粘贴拟投稿论文的 Title / Abstract / 大纲",
+                            placeholder="在此粘贴，系统将给出手术级重构方案...",
                             lines=8
                         )
                         
-                    with gr.Tab("📁 选项 B：上传草稿文件 (支持整篇全量对标)"):
+                    with gr.Tab("上传草稿文件"):
                         file_input = gr.File(
-                            label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
+                            label="上传 Word (.docx) 或 PDF (.pdf) 文件",
                             file_types=[".docx", ".pdf"]
                         )
                     
-                    submit_btn = gr.Button("🚀 一键生成期刊选稿画像与对标报告", variant="primary")
+                    submit_btn = gr.Button("一键生成期刊选稿画像与对标报告", variant="primary", size="lg")
                     
                 # 右侧报告输出区
-                with gr.Column(scale=3):
-                    gr.Markdown("### 📝 期刊选稿画像与手术修稿报告")
+                with gr.Column(scale=3, min_width=480):
+                    gr.Markdown("### 期刊选稿画像与修稿报告")
                     status_output = gr.Textbox(
-                        label="系统运行状态",
-                        value="就绪。等待输入并点击生成...",
-                        interactive=False
+                        label="运行状态",
+                        value="就绪，等待输入并点击生成...",
+                        interactive=False,
+                        elem_classes=["status-box"]
                     )
                     report_output = gr.Markdown(
                         value="*报告生成后将在此处以精美 Markdown 格式自动渲染展示。*"
                     )
 
-        with gr.Tab("🧭 全网多期刊梯队智能路由"):
-            gr.Markdown("### 🧭 论文草稿多期刊投递阵列路由大脑")
-            gr.Markdown("系统将自动解析你的论文草稿（支持粘贴文本、上传 Word/PDF 文件，并全量共享主大厅的草稿与文件），对比候选期刊池评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。")
+        with gr.Tab("多期刊梯队智能路由"):
+            gr.Markdown("### 论文草稿多期刊投递阵列路由")
+            gr.Markdown("系统将自动解析你的论文草稿（支持粘贴文本、上传 Word/PDF 文件，并共享主大厅的草稿与文件），对比候选期刊池评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。")
             
             with gr.Tabs():
-                with gr.Tab("📝 选项 A：手动粘贴摘要/草稿"):
+                with gr.Tab("粘贴摘要/草稿"):
                     router_draft_input = gr.Textbox(
                         label="粘贴你的论文草稿 (Title / Abstract / 全文)",
                         lines=6,
                         placeholder="在此粘贴论文草稿（若在主大厅已粘贴或上传文件，此处可留空，系统自动复用）..."
                     )
-                with gr.Tab("📁 选项 B：上传草稿文件 (.docx / .pdf)"):
+                with gr.Tab("上传草稿文件"):
                     router_file_input = gr.File(
-                        label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
+                        label="上传 Word (.docx) 或 PDF (.pdf) 文件",
                         file_types=[".docx", ".pdf"]
                     )
 
-            router_btn = gr.Button("🧭 一键路由生成多期刊投递阵列", variant="primary")
+            router_btn = gr.Button("一键路由生成多期刊投递阵列", variant="primary", size="lg")
             router_output = gr.Markdown(value="*决策阵列生成后将在此处渲染展示。*")
 
-        with gr.Tab("💬 模拟审稿人在线对答"):
+        with gr.Tab("模拟审稿人在线对答"):
             gr.Markdown(
                 """
-                ### 💬 模拟 AE/审稿人对话舱 (Peer Reviewer Chatbot)
-                在大厅生成诊断报告后，你可以在此与“模拟 Associate Editor / 审稿人”展开在线答辩与交流。
-                审稿人将完全继承本期刊的学术品味，对你的修改思路与稳健性方案进行审核把关。
+                ### 模拟 AE / 审稿人对话舱
+                在主大厅生成诊断报告后，你可以在此与模拟 Associate Editor / 审稿人展开在线答辩与交流。
+                审稿人将继承本期刊的学术品味，对你的修改思路与稳健性方案进行审核把关。
                 """
             )
-            chatbot = gr.Chatbot(label="与 Associate Editor/审稿人对线中", height=500)
+            chatbot = gr.Chatbot(label="与 Associate Editor / 审稿人对话中", height=480)
             msg_input = gr.Textbox(
-                label="输入你的疑问或辩词 (例如: '关于第2点样本量劣势，如果我补充二期追踪数据达到 N=750，可以吗？')",
-                placeholder="在此输入你的消息...",
+                label="输入你的疑问或辩词",
+                placeholder="例如: 关于第2点样本量劣势，如果我补充二期追踪数据达到 N=750，可以吗？",
                 lines=2
             )
             with gr.Row():
