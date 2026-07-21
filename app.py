@@ -461,4 +461,5 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
     clear_btn.click(fn=lambda: ([], ""), inputs=None, outputs=[chatbot, msg_input])
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", server_port=7860, share=False, theme=theme)
+    print("\n[WebUI 启动成功] 请打开浏览器访问: http://127.0.0.1:7860\n", flush=True)
+    demo.launch(server_name="127.0.0.1", server_port=7860, share=False)
