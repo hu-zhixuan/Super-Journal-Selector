@@ -5,6 +5,7 @@ import time
 import random
 import logging
 import requests
+import urllib3
 import urllib3.util.connection as urllib3_cn
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
