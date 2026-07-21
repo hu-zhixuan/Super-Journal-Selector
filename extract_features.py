@@ -129,18 +129,25 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
 
     def rate_limit_qps(self):
         """
-        线程安全的 QPS 限速机制，确保请求间隔不小于 0.5s (2 QPS 限速)。
+        线程安全的 QPS 限速机制。在锁内部计算计划下一次允许发起请求的时间戳并释放锁，在锁外部执行 sleep。
+        避免持锁 sleep 导致多线程并发完全被强制串行化阻塞。
         """
         import threading
         if not FeatureExtractor._qps_lock:
             FeatureExtractor._qps_lock = threading.Lock()
         
+        sleep_time = 0.0
         with FeatureExtractor._qps_lock:
             now = time.time()
             elapsed = now - FeatureExtractor._last_req_time[0]
             if elapsed < 0.5:
-                time.sleep(0.5 - elapsed)
-            FeatureExtractor._last_req_time[0] = time.time()
+                sleep_time = 0.5 - elapsed
+                FeatureExtractor._last_req_time[0] = now + sleep_time
+            else:
+                FeatureExtractor._last_req_time[0] = now
+
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
     def extract_batch(self, papers: List[PaperRecord], max_workers: int = 3) -> List[Dict[str, Any]]:
         """

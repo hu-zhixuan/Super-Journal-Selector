@@ -237,11 +237,13 @@ class ProfileAggregator:
                     model = SentenceTransformer('all-MiniLM-L6-v2')
                     draft_emb = model.encode(user_draft_text, convert_to_tensor=True)
                     
+                    from llm_client import EMBEDDING_MODEL_NAME
+                    model_slug = "".join(c if c.isalnum() else "_" for c in EMBEDDING_MODEL_NAME.lower())
                     os.makedirs("cache", exist_ok=True)
                     for f in features_list:
                         paper_id_clean = f.get("paper_id") or f.get("title", "")
                         paper_hash = hashlib.md5(paper_id_clean.encode("utf-8")).hexdigest()[:12]
-                        emb_cache_file = os.path.join("cache", f"embedding_{paper_hash}.json")
+                        emb_cache_file = os.path.join("cache", f"embedding_{paper_hash}_{model_slug}.json")
                         
                         semantic_elements = [
                             f.get("title", ""),

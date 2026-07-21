@@ -1,7 +1,7 @@
 # 📊 期刊选稿画像助手 (Journal Profile Assistant)
 > **成果撰写与投稿决策阶段的“学术品味诊断与策略改造器” —— 百篇大样本驱动的极致特殊指向性对标系统**
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/QD8-png/-skill)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/QD8-png/journal-profile-assistant-skill)
 [![Python Version](https://img.shields.io/badge/Python-3.10%20%7C%203.11-green?logo=python)](https://www.python.org/)
 [![Sample Scaling](https://img.shields.io/badge/Sample_Scaling-100%2B_Papers_Concurrent-purple)](LICENSE)
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
@@ -16,8 +16,8 @@
 
 本 Skill 旨在打造一个数据驱动的 **期刊选稿底层偏好画像与大样本聚类重构系统**：
 * **输入**：目标期刊英文全称或缩写（可选传入个人准备投稿的论文摘要/完整草稿 `.docx/.pdf`）。
-* **大样本处理（核心差异化壁垒）**：抓取 OpenAlex 近年 **100~200 篇高引/最新真实论文大样本**，多线程并发拉起 LLM 抽取底层科研特征（构念、工具、样本底线），利用纯代码计算量化分布矩阵，通过**大样本池多维度余弦聚类**精准定位 Top 3 最吻合标杆。
-* **输出**：生成一份包含“范式倾向、理论视角、数据底线、审稿雷区、标题/摘要手术级改写”的 Markdown 深度循证对标指南，每句话必须引用真实文献证据，彻底杜绝 AI 空话！
+* **大样本处理（核心差异化壁垒）**：抓取 OpenAlex 近年 **100~200 篇高引/最新真实论文大样本**，多线程并发拉起 LLM 抽取底层科研特征（构念、工具、样本底线），利用纯代码计算量化分布矩阵，通过**大样本池多维度余弦聚类**精准定位 Top 3 最吻合标杆与 Top 5 推荐引用文献。
+* **输出**：生成一份包含“范式倾向、理论视角、数据底线、审稿雷区、标题/摘要手术级改写”的 Markdown 深度循证对标指南，内置归一化 Citation Validator，对未在真实抓取池验证的文献自动标记 `[⚠️ Unverified Reference]`。
 
 ---
 
