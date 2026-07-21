@@ -21,8 +21,11 @@ DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
     if host == "fxb.supa.net.cn" and DEFAULT_DIRECT_IP:
-        # 强制将连接导向物理 IP，实现分流直连
-        return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
+        # 尝试强制导向物理 IP，如果失败则回退至标准 DNS 域名解析
+        try:
+            return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
+        except Exception:
+            pass
     return urllib3_cn._orig_create_connection(address, *args, **kwargs)
 
 def install_dns_patch():
