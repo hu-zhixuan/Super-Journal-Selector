@@ -407,11 +407,74 @@ def run_journal_router(router_draft_text: str, router_file_obj: Any, main_draft_
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
+/* ===== Force Light Mode (override system dark mode) ===== */
+:root, .dark, [data-theme="dark"] {
+    --background-fill-primary: #f8fafc !important;
+    --background-fill-secondary: #ffffff !important;
+    --block-background-fill: #ffffff !important;
+    --block-border-color: #e2e8f0 !important;
+    --body-background-fill: #f8fafc !important;
+    --body-text-color: #1e293b !important;
+    --color-accent: #4f46e5 !important;
+    --neutral-700: #334155 !important;
+    --neutral-800: #1e293b !important;
+    --neutral-900: #0f172a !important;
+    --neutral-950: #020617 !important;
+    color-scheme: light !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root, .dark, [data-theme="dark"] {
+        --background-fill-primary: #f8fafc !important;
+        --background-fill-secondary: #ffffff !important;
+        --block-background-fill: #ffffff !important;
+        --block-border-color: #e2e8f0 !important;
+        --body-background-fill: #f8fafc !important;
+        --body-text-color: #1e293b !important;
+        color-scheme: light !important;
+    }
+}
+
 /* ===== Global Background & Typography ===== */
-body, .gradio-container {
+html, body, .gradio-container, .gradio-container.dark {
     background-color: #f8fafc !important;
+    background-image: none !important;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     color: #1e293b !important;
+}
+
+/* Force all Gradio blocks/panels to light */
+.gradio-container .block, .gradio-container .form,
+.gradio-container [data-testid="column"],
+.gradio-container .gr-panel,
+.gradio-container .gr-box {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    color: #1e293b !important;
+}
+
+/* Force labels and text to dark on light */
+.gradio-container label, .gradio-container .label-text,
+.gradio-container span, .gradio-container p,
+.gradio-container .gr-input-label {
+    color: #334155 !important;
+}
+
+/* Force inner tabs (sub-tabs) to light */
+.gradio-container .tab-nav {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+}
+
+.gradio-container .tab-nav button {
+    color: #64748b !important;
+    background-color: transparent !important;
+}
+
+.gradio-container .tab-nav button.selected {
+    background-color: #ffffff !important;
+    color: #4f46e5 !important;
+    border-color: #4f46e5 !important;
 }
 
 /* ===== Hero Banner ===== */
