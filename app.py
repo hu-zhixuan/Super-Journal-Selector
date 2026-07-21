@@ -370,6 +370,33 @@ AE/Reviewer:
     return history, ""
 
 
+def run_journal_router(draft_text: str):
+    if not draft_text or not draft_text.strip():
+        return "❌ 错误：请先输入或粘贴你的论文草稿内容！"
+    from journal_router import JournalRouter
+    router = JournalRouter()
+    res = router.route_journals(draft_text)
+    
+    note = res.get("draft_summary_note", "论文摘要解析完成")
+    tiers = res.get("recommended_tiers", [])
+    
+    md_lines = [
+        f"### 🧭 全网学术期刊投递梯队路由诊断大盘",
+        f"> **稿件定位摘要**：{note}\n",
+        f"| 投递梯队 | 推荐期刊名称 | 综合契合度得分 | 预估基准录用率 | 决策路由理由 |",
+        f"| :--- | :--- | :--- | :--- | :--- |"
+    ]
+    for item in tiers:
+        tier = item.get("tier", "")
+        name = item.get("journal_name", "")
+        score = item.get("fit_score", 0)
+        rate = item.get("estimated_acceptance_rate", "")
+        reason = item.get("reason", "")
+        md_lines.append(f"| **{tier}** | `{name}` | **{score} 分** | `{rate}` | {reason} |")
+        
+    return "\n".join(md_lines)
+
+
 with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
     gr.Markdown(
         """
@@ -437,6 +464,13 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
                         value="*报告生成后将在此处以精美 Markdown 格式自动渲染展示。*"
                     )
 
+        with gr.Tab("🧭 全网多期刊梯队智能路由"):
+            gr.Markdown("### 🧭 论文草稿多期刊投递阵列路由大脑")
+            gr.Markdown("上传或粘贴你的论文草稿，系统将自动对比数据库中的候选期刊，自动评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。")
+            router_draft_input = gr.Textbox(label="粘贴你的论文草稿 (Title / Abstract / 全文)", lines=8, placeholder="在此粘贴论文草稿进行多期刊比对路由...")
+            router_btn = gr.Button("🧭 一键路由生成多期刊投递阵列", variant="primary")
+            router_output = gr.Markdown(value="*决策阵列生成后将在此处渲染展示。*")
+
         with gr.Tab("💬 模拟审稿人在线对答"):
             gr.Markdown(
                 """
@@ -467,6 +501,13 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
         fn=run_pipeline,
         inputs=[journal_input, years_input, max_papers_input, draft_input, file_input],
         outputs=[status_output, report_output]
+    )
+
+    # 路由大脑点击事件绑定
+    router_btn.click(
+        fn=run_journal_router,
+        inputs=router_draft_input,
+        outputs=router_output
     )
 
     # 聊天消息发送绑定 (直接绑定 report_output 作为 report_text 输入，解决 gr.State 缓存问题)
