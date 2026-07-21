@@ -226,12 +226,13 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
 
         # Layer ②: LLM 结构化特征提取与实时进度条
         total_papers = len(papers)
-        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=3)...", ""
+        progress(0.20, desc=f"[2/4] 正在拉起 5 线程并发抽取 0/{total_papers}...")
+        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。已开启多线程并发网络抽取 (Workers=5)...", ""
         
         extractor = FeatureExtractor()
         extracted_features = []
         
-        for completed, total, p_item, current_results in extractor.extract_batch_iter(papers, max_workers=3):
+        for completed, total, p_item, current_results in extractor.extract_batch_iter(papers, max_workers=5):
             extracted_features = current_results
             sub_pct = completed / total
             overall_pct = 0.20 + 0.55 * sub_pct
