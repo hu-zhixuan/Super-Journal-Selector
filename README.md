@@ -34,7 +34,7 @@
                                        v
 +--------------------------------------------------------------------------------+
 | [Layer 2: 并发结构化特征提取层] extract_features.py                              |
-|   开启多线程池 (Workers=10) 并发调用 LLM，将大样本摘要极速提炼为规范化 JSON 实体     |
+|   开启多线程池 (Workers=3, 2 QPS 限速保护) 并发调用 LLM，将摘要提炼为规范 JSON 实体 |
 +--------------------------------------------------------------------------------+
                                        |
                                        v
@@ -96,6 +96,15 @@ python main.py --journal "Computers in Human Behavior" --years 3 --max-papers 10
 
 # 模式B：定制化对标修稿运行：传入个人论文草稿，生成个性化改写与实验防御指南
 python main.py --journal "Strategic Management Journal" --user-draft my_manuscript.docx --max-papers 100
+```
+
+### 5. 运行自动化测试套件与评估
+```bash
+# 运行单元测试套件 (Mock 全隔离，0.017 秒极速通过)
+python -m unittest discover -s tests
+
+# 运行推荐算法独立标注评估 (进行算法与随机基线对比)
+python evaluate_recommendations.py
 ```
 
 ---

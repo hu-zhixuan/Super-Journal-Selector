@@ -23,8 +23,18 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest pytest-cov
+        pip install ruff mypy pytest pytest-cov
 
-    - name: Run Pytest
+    - name: Run Ruff Linter
+      run: |
+        ruff check .
+      continue-on-error: true
+
+    - name: Run Mypy Type Checker
+      run: |
+        mypy --ignore-missing-imports main.py fetch_papers.py extract_features.py aggregate.py generate_profile.py llm_client.py
+      continue-on-error: true
+
+    - name: Run Pytest Coverage
       run: |
         pytest --cov=. tests/

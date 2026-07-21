@@ -63,12 +63,16 @@ class FeatureExtractor:
         paper_id_clean = paper.id or paper.doi or "unknown"
         paper_hash = hashlib.md5(paper_id_clean.encode("utf-8")).hexdigest()[:12]
         
-        system_prompt = "You are an expert academic metadata extractor. Output valid JSON only."
+        # 从 Pydantic 单一事实来源自动获取 JSON Schema
+        schema_json_dict = ExtractedFeatures.model_json_schema()
+        schema_str = json.dumps(schema_json_dict, ensure_ascii=False)
+
+        system_prompt = "You are an expert academic metadata extractor. Output valid JSON matching the schema only."
         fingerprint = get_prompt_fingerprint(
             prompt_version=EXTRACTION_PROMPT_VERSION,
             model_name=self.llm.model,
             temperature=0.1,
-            system_prompt=system_prompt
+            system_prompt=system_prompt + schema_str
         )
         
         cache_dir = "cache"
@@ -90,22 +94,17 @@ class FeatureExtractor:
         self.rate_limit_qps()
 
         prompt = f"""
-You are an expert academic research reviewer. Read the following paper title and abstract carefully, then extract key methodological and theoretical features into valid JSON format matching the schema below.
+You are an expert academic research reviewer. Read the following paper title and abstract carefully, then extract key methodological and theoretical features into valid JSON format matching the Pydantic JSON schema below.
 
 Paper Title: {paper.title}
 Abstract: {paper.abstract}
 
-Required JSON Schema Fields:
-1. `method_category` (string): Strictly select EXACTLY ONE of: "Quantitative_Empirical", "Qualitative_CaseStudy", "Mixed_Methods", "Theoretical_Review", "Computational_AI_Simulation".
-2. `sample_description` (string): Brief description of sample scale and data source in concise text.
-3. `sample_size_approx` (integer): Approximate numeric total sample size (e.g. 1500, 250). Return -1 if purely theoretical, case study without N, or not applicable.
-4. `theoretical_frameworks` (list of strings): Up to 3 main theoretical lenses or core conceptual constructs.
-5. `analytical_tools` (list of strings): Up to 4 statistical, econometric, computational tools or models used (e.g., OLS, DID, SEM, LLM, Regression).
-6. `novelty_highlight` (string): A concise 1-sentence analytical note on what makes this research design or contribution standout for publication.
-7. `open_science_practices` (list of strings): List of open science practices mentioned or implied (e.g., ["Open Data"], ["Open Code"], ["Preregistration"]). Use ["None"] if not mentioned.
-8. `statistical_reporting_style` (string): Summary of how statistics or hypotheses are tested and reported (e.g., "Reported P-values and mediation confidence intervals", "Reported Bayesian factor analysis", "None" if qualitative).
+Target Pydantic JSON Schema Specification:
+```json
+{json.dumps(schema_json_dict, ensure_ascii=False, indent=2)}
+```
 
-Output MUST be clean valid JSON only without extra conversational markdown.
+Output MUST be clean valid JSON only matching the schema above, without extra conversational markdown.
 """
         try:
             raw_json = self.llm.call_json(prompt=prompt)

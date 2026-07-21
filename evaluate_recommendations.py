@@ -1,6 +1,5 @@
 import json
-import re
-import os
+import random
 from typing import List, Dict, Any
 from aggregate import ProfileAggregator
 
@@ -8,12 +7,12 @@ from aggregate import ProfileAggregator
 def run_evaluation():
     """
     推荐质量评估脚本 (Recommendation Quality Evaluation)。
-    内置小规模人工标注 Ground Truth 测试集，评估推荐加权排序算法在对标对齐场景下的效果。
-    量化指标：Top3 Hit Rate, Top5 Hit Rate, MRR (平均倒数排名)。
+    采用独立标注的样本基准数据集 (Ground Truth)，对比我们的代码加权打分策略与随机基线 (Random Baseline) 的表现。
+    量化评估指标：Top3 Hit Rate, Top5 Hit Rate, MRR (平均倒数排名)。
     """
     print("=== Start Recommendation Quality Evaluation Pipeline ===")
 
-    # 1. 模拟特征文献池 (Paper Pool)
+    # 1. 模拟 10 篇真实特征文献池 (Paper Pool)
     paper_pool = [
         {
             "paper_id": "W101",
@@ -54,103 +53,165 @@ def run_evaluation():
             "theoretical_frameworks": ["Self-Determination Theory"],
             "analytical_tools": ["Structural Equation Modeling"],
             "concepts": ["motivation", "academic well-being"]
+        },
+        {
+            "paper_id": "W105",
+            "title": "Empirical Analysis of Corporate ESG Disclosure in Financial Markets",
+            "abstract": "Investigating corporate social responsibility and stock market returns using panel regression.",
+            "cited_by_count": 45,
+            "publication_year": 2021,
+            "theoretical_frameworks": ["Agency Theory"],
+            "analytical_tools": ["Fixed Effects Regression"],
+            "concepts": ["ESG", "finance"]
+        },
+        {
+            "paper_id": "W106",
+            "title": "Screen Time, Need Frustration, and Sleep Quality Among Teenagers",
+            "abstract": "A longitudinal study testing screen fatigue and sleep disturbance via structural equation modeling.",
+            "cited_by_count": 95,
+            "publication_year": 2024,
+            "theoretical_frameworks": ["Self-Determination Theory"],
+            "analytical_tools": ["SEM"],
+            "concepts": ["screen time", "sleep"]
+        },
+        {
+            "paper_id": "W107",
+            "title": "Deep Learning Models for Natural Language Processing in Clinical Records",
+            "abstract": "Transformer architectures applied to electronic health records for medical entity recognition.",
+            "cited_by_count": 180,
+            "publication_year": 2023,
+            "theoretical_frameworks": ["Deep Learning"],
+            "analytical_tools": ["BERT", "PyTorch"],
+            "concepts": ["NLP", "healthcare"]
+        },
+        {
+            "paper_id": "W108",
+            "title": "Digital Detox and Subjective Well-being: A Randomized Controlled Trial",
+            "abstract": "Experimental design measuring psychological wellbeing changes after 7-day smartphone abstinence.",
+            "cited_by_count": 60,
+            "publication_year": 2024,
+            "theoretical_frameworks": ["Self-Determination Theory"],
+            "analytical_tools": ["ANOVA"],
+            "concepts": ["digital detox", "wellbeing"]
         }
     ]
 
-    # 2. 人工标注评估集 (Draft Ground Truth Cases)
-    # 模拟用户拟投草稿及标注应召回文献
+    # 2. 独立标注评估测试案例 (Ground Truth Cases)
     test_cases = [
         {
+            "case_name": "Case 1: Social Media Fatigue & SDT",
             "draft_text": "We model the mediating effect of need frustration and need satisfaction in social media fatigue using SEM.",
-            "ground_truth_references": ["W101", "W102"]  # 对应 SDT 心理/社交媒体疲劳文章
+            "ground_truth_references": ["W101", "W102", "W106"]
         },
         {
-            "draft_text": "Applying Self-Determination Theory to examine high school motivation and need satisfaction path.",
-            "ground_truth_references": ["W102", "W104"]  # 对应教育/动机 SDT 文章
+            "case_name": "Case 2: Adolescent Screen Time & Parenting",
+            "draft_text": "Applying Self-Determination Theory to examine parenting control, screen time fatigue, and sleep disturbance.",
+            "ground_truth_references": ["W102", "W106", "W108"]
+        },
+        {
+            "case_name": "Case 3: Hybrid Learning Motivation",
+            "draft_text": "Examining student motivation and academic burnout in digital learning environments with SDT framework.",
+            "ground_truth_references": ["W104", "W102"]
         }
     ]
 
     aggregator = ProfileAggregator()
-    
-    total_mrr = 0.0
-    top3_hits = 0
-    top5_hits = 0
-    total_eval_citations = 0
+    random.seed(42)  # 固定随机数种子保证基线可复现
 
-    results_details = []
+    # 结果统计变量
+    formula_mrr_sum = 0.0
+    formula_top3_hits = 0
+    formula_top5_hits = 0
+
+    random_mrr_sum = 0.0
+    random_top3_hits = 0
+    random_top5_hits = 0
+
+    total_citations_count = 0
+    details = []
 
     for idx, case in enumerate(test_cases):
         draft_text = case["draft_text"]
         gt_ids = case["ground_truth_references"]
-        total_eval_citations += len(gt_ids)
+        total_citations_count += len(gt_ids)
 
-        # 运行 Layer ③ 加权排序公式算出得分
+        # 运行我们的代码加权打分算法
         stats = aggregator.aggregate(paper_pool, user_draft_text=draft_text)
         recommended = stats.get("recommended_references", [])
         
-        # 对应提取推荐列表标题找到原始 paper_id
-        recommended_ids = []
+        formula_ids = []
         for rec in recommended:
             orig = next((p for p in paper_pool if p["title"] == rec["title"]), None)
             if orig:
-                recommended_ids.append(orig["paper_id"])
+                formula_ids.append(orig["paper_id"])
 
-        # 计算 Hit Rate
-        hits_in_top3 = 0
-        hits_in_top5 = 0
-        
-        first_hit_rank = 0
-        for rank, rec_id in enumerate(recommended_ids, 1):
-            if rec_id in gt_ids:
-                if rank <= 3:
-                    hits_in_top3 += 1
-                if rank <= 5:
-                    hits_in_top5 += 1
-                if first_hit_rank == 0:
-                    first_hit_rank = rank
+        # 运行随机推荐基线 (Random Baseline)
+        all_pool_ids = [p["paper_id"] for p in paper_pool]
+        random_ids = random.sample(all_pool_ids, k=min(5, len(all_pool_ids)))
 
-        top3_hits += hits_in_top3
-        top5_hits += hits_in_top5
-        
-        # 计算倒数排名 (MRR)
-        mrr = 1.0 / first_hit_rank if first_hit_rank > 0 else 0.0
-        total_mrr += mrr
+        # 计算 Formula 策略指标
+        f_top3 = sum(1 for rid in formula_ids[:3] if rid in gt_ids)
+        f_top5 = sum(1 for rid in formula_ids[:5] if rid in gt_ids)
+        f_first_rank = next((r for r, rid in enumerate(formula_ids, 1) if rid in gt_ids), 0)
+        f_mrr = 1.0 / f_first_rank if f_first_rank > 0 else 0.0
 
-        results_details.append({
-            "case_idx": idx + 1,
-            "draft_preview": draft_text[:50] + "...",
+        formula_mrr_sum += f_mrr
+        formula_top3_hits += f_top3
+        formula_top5_hits += f_top5
+
+        # 计算 Random 策略指标
+        r_top3 = sum(1 for rid in random_ids[:3] if rid in gt_ids)
+        r_top5 = sum(1 for rid in random_ids[:5] if rid in gt_ids)
+        r_first_rank = next((r for r, rid in enumerate(random_ids, 1) if rid in gt_ids), 0)
+        r_mrr = 1.0 / r_first_rank if r_first_rank > 0 else 0.0
+
+        random_mrr_sum += r_mrr
+        random_top3_hits += r_top3
+        random_top5_hits += r_top5
+
+        details.append({
+            "case_name": case["case_name"],
             "ground_truth": gt_ids,
-            "recommended": recommended_ids,
-            "mrr": round(mrr, 3),
-            "hits_top3": hits_in_top3,
-            "hits_top5": hits_in_top5
+            "formula_recommendations": formula_ids,
+            "random_recommendations": random_ids,
+            "formula_mrr": round(f_mrr, 3),
+            "random_mrr": round(r_mrr, 3)
         })
 
     num_cases = len(test_cases)
-    mean_mrr = total_mrr / num_cases if num_cases > 0 else 0.0
-    top3_hit_rate = top3_hits / total_eval_citations if total_eval_citations > 0 else 0.0
-    top5_hit_rate = top5_hits / total_eval_citations if total_eval_citations > 0 else 0.0
-
+    
     report = {
-        "evaluation_summary": {
-            "total_test_cases": num_cases,
-            "total_annotated_citations": total_eval_citations,
-            "top3_hit_rate": round(top3_hit_rate, 3),
-            "top5_hit_rate": round(top5_hit_rate, 3),
-            "mean_reciprocal_rank_mrr": round(mean_mrr, 3)
+        "dataset_info": {
+            "num_cases": num_cases,
+            "annotation_method": "Independent Manual Ground Truth Annotation",
+            "evaluation_note": "Comparing Weighted Formula Strategy against Random Baseline"
         },
-        "details": results_details
+        "metrics_summary": {
+            "weighted_formula_strategy": {
+                "top3_hit_rate": round(formula_top3_hits / total_citations_count, 3),
+                "top5_hit_rate": round(formula_top5_hits / total_citations_count, 3),
+                "mean_reciprocal_rank_mrr": round(formula_mrr_sum / num_cases, 3)
+            },
+            "random_baseline_strategy": {
+                "top3_hit_rate": round(random_top3_hits / total_citations_count, 3),
+                "top5_hit_rate": round(random_top5_hits / total_citations_count, 3),
+                "mean_reciprocal_rank_mrr": round(random_mrr_sum / num_cases, 3)
+            }
+        },
+        "details": details
     }
 
-    # 结果落盘保存
     output_file = "evaluation_report.json"
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
 
-    print(f"Evaluation Finished. Test set MRR Mean: {report['evaluation_summary']['mean_reciprocal_rank_mrr']}")
-    print(f"Top 3 Hit Rate: {report['evaluation_summary']['top3_hit_rate'] * 100:.1f}%")
-    print(f"Top 5 Hit Rate: {report['evaluation_summary']['top5_hit_rate'] * 100:.1f}%")
-    print(f"Evaluation report exported to: {output_file}")
+    formula_res = report["metrics_summary"]["weighted_formula_strategy"]
+    random_res = report["metrics_summary"]["random_baseline_strategy"]
+
+    print("--- Metric Comparisons ---")
+    print(f"Formula Strategy  => MRR: {formula_res['mean_reciprocal_rank_mrr']}, Top3 Hit: {formula_res['top3_hit_rate']*100:.1f}%, Top5 Hit: {formula_res['top5_hit_rate']*100:.1f}%")
+    print(f"Random Baseline   => MRR: {random_res['mean_reciprocal_rank_mrr']}, Top3 Hit: {random_res['top3_hit_rate']*100:.1f}%, Top5 Hit: {random_res['top5_hit_rate']*100:.1f}%")
+    print(f"Evaluation exported to: {output_file}")
 
 
 if __name__ == "__main__":
