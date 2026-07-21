@@ -233,17 +233,18 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         
         for completed, total, p_item, current_results in extractor.extract_batch_iter(papers, max_workers=3):
             extracted_features = current_results
-            pct = completed / total
+            sub_pct = completed / total
+            overall_pct = 0.20 + 0.55 * sub_pct
             title_preview = (p_item.title[:35] + "...") if len(p_item.title) > 35 else p_item.title
             
-            # 挂载 Gradio 顶部原生进度条
-            progress(pct, desc=f"抽取特征 [{completed}/{total}]: {title_preview}")
+            # 挂载 Gradio 顶部原生进度条 (平滑占据 20% - 75% 梯度)
+            progress(overall_pct, desc=f"抽取特征 [{completed}/{total}]: {title_preview}")
             
             # 动态渲染控制台文本 ASCII 进度条
             filled_len = int(completed * 20 // total)
             bar_str = "█" * filled_len + "░" * (20 - filled_len)
             yield (
-                f"⏳ [2/4] 正在并发抽取特征 ({completed}/{total} 篇 - {int(pct*100)}%)\n"
+                f"⏳ [2/4] 正在并发抽取特征 ({completed}/{total} 篇 - {int(sub_pct*100)}%)\n"
                 f"进度: [{bar_str}]\n"
                 f"最新完成: 《{title_preview}》",
                 ""
@@ -256,11 +257,13 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         draft_text = final_draft_text.strip() if final_draft_text and final_draft_text.strip() else None
 
         # Layer ③: 纯代码统计聚合
+        progress(0.80, desc="[3/4] 特征抽取完成！正在启动统计引擎计算余弦相似度...")
         yield "⏳ [3/4] 特征抽取完成！正在启动 Python 统计引擎计算范式分布并执行文献相似度诊断...", ""
         aggregator = ProfileAggregator()
         aggregated_stats = aggregator.aggregate(extracted_features, user_draft_text=draft_text)
 
         # Layer ④: LLM 生成偏好画像与策略报告
+        progress(0.90, desc="[4/4] 正在根据大样本事实底图撰写对标报告与发表概率预测...")
         yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", ""
         generator = ProfileGenerator()
         
@@ -270,6 +273,8 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             journal_metadata=journal_metadata,
             user_draft_text=draft_text
         )
+
+        progress(1.0, desc="[4/4] 画像报告与发表概率预测生成成功！")
 
         os.makedirs("output", exist_ok=True)
         safe_journal_filename = "".join(c if c.isalnum() else "_" for c in journal_name)
