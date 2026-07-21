@@ -231,29 +231,7 @@ class OpenAlexFetcher:
                         break
 
                 if not match_found:
-                    try:
-                        from llm_client import LLMClient
-                        llm = LLMClient()
-                        prompt = f"""
-Given the academic journal name: "{source_display_name}" (Estimated Impact Factor: {summary_stats.get("2yr_mean_citedness", "N/A")}), please estimate its standard academic rankings.
-Output strictly in JSON format matching this schema:
-{{
-    "jcr_zone": "JCR zone (e.g. Q1, Q2, Q3, Q4)",
-    "cas_zone": "Chinese Academy of Sciences partition zone (e.g. 1区, 2区, 3区, 4区)",
-    "cas_sub_categories": "Sub-disciplines/Categories in Chinese (e.g. 物理:多学科, 计算机:信息系统)",
-    "is_top": "Whether it is a CAS Top Journal (e.g. 是 (Top 期刊), 否)"
-}}
-Only return JSON.
-"""
-                        resp_json = llm.call_json(prompt=prompt)
-                        local_partition = {
-                            "jcr_zone": resp_json.get("jcr_zone", "未知"),
-                            "cas_zone": resp_json.get("cas_zone", "未知"),
-                            "cas_sub_categories": resp_json.get("cas_sub_categories", "未知"),
-                            "is_top": resp_json.get("is_top", "未知")
-                        }
-                    except Exception as e_llm:
-                        logger.warning(f"智能大模型估算分区出错: {e_llm}")
+                    logger.info(f"期刊 '{source_display_name}' 未匹配到本地分区数据，默认标记为未知。")
         except Exception as e:
             logger.warning(f"加载本地分区数据字典异常: {e}")
 
