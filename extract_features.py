@@ -149,15 +149,18 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    def extract_batch(self, papers: List[PaperRecord], max_workers: int = 3) -> List[Dict[str, Any]]:
+    def extract_batch_iter(self, papers: List[PaperRecord], max_workers: int = 3):
         """
-        利用多线程池并发批量解析大样本论文列表，实现百篇级高频特征极速结构化抽取
+        生成器版本的 extract_batch，每完成一篇论文特征抽取，就 yield (completed_count, total_count, paper, extracted_results)
+        便于 WebUI / CLI 实时接收并更新百分比进度条与状态展示。
         """
         import threading
         from datetime import datetime
         logger.info(f"开始开启并发线程池 (Workers={max_workers})，批量结构化解析 {len(papers)} 篇大样本论文特征...")
         extracted_results: List[Dict[str, Any]] = []
         self.failed_papers = []
+        total_count = len(papers)
+        completed_count = 0
 
         def process_one(p: PaperRecord) -> Optional[Dict[str, Any]]:
             feat = self.extract_paper(p)
@@ -173,7 +176,8 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_paper = {executor.submit(process_one, p): p for p in papers}
-            for future in tqdm(as_completed(future_to_paper), total=len(papers), desc="大样本并发抽取"):
+            for future in tqdm(as_completed(future_to_paper), total=total_count, desc="大样本并发抽取"):
+                completed_count += 1
                 p = future_to_paper[future]
                 try:
                     res = future.result()
@@ -197,7 +201,16 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
                         "retry_count": 3,
                         "timestamp": datetime.now().isoformat()
                     })
+                yield completed_count, total_count, p, extracted_results
 
-        logger.info(f"并发解析完成，成功获得 {len(extracted_results)}/{len(papers)} 篇大样本有效特征实体。")
-        return extracted_results
+        logger.info(f"并发解析完成，成功获得 {len(extracted_results)}/{total_count} 篇大样本有效特征实体。")
+
+    def extract_batch(self, papers: List[PaperRecord], max_workers: int = 3) -> List[Dict[str, Any]]:
+        """
+        利用多线程池并发批量解析大样本论文列表，实现百篇级高频特征极速结构化抽取
+        """
+        results = []
+        for _, _, _, current_results in self.extract_batch_iter(papers, max_workers=max_workers):
+            results = current_results
+        return results
 

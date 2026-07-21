@@ -180,9 +180,9 @@ def search_journals(query: str):
     return gr.Dropdown(choices=[], value=None)
 
 
-def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str, file_obj):
+def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str, file_obj, progress=gr.Progress()):
     """
-    网页端调用的生成函数。支持文件解析优先逻辑。
+    网页端调用的生成函数。支持文件解析优先逻辑与实时进度条推流。
     """
     journal_name = journal_name.strip() if journal_name else ""
     if not journal_name:
@@ -212,6 +212,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
 
     try:
         # Layer ①: 抓取数据
+        progress(0.05, desc="正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...")
         yield "⏳ [1/4] 正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...", ""
         fetcher = OpenAlexFetcher()
         papers, journal_metadata = fetcher.fetch_recent_papers(
@@ -223,12 +224,30 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             yield f"❌ 错误：未在 OpenAlex 中检索到期刊 '{journal_name}' 或近几年该刊无有效发文。", ""
             return
 
-        # Layer ②: LLM 结构化特征提取
+        # Layer ②: LLM 结构化特征提取与实时进度条
         total_papers = len(papers)
         yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。正在开启多线程池并发高速提取特征 (Workers=3)...", ""
         
         extractor = FeatureExtractor()
-        extracted_features = extractor.extract_batch(papers, max_workers=3)
+        extracted_features = []
+        
+        for completed, total, p_item, current_results in extractor.extract_batch_iter(papers, max_workers=3):
+            extracted_features = current_results
+            pct = completed / total
+            title_preview = (p_item.title[:35] + "...") if len(p_item.title) > 35 else p_item.title
+            
+            # 挂载 Gradio 顶部原生进度条
+            progress(pct, desc=f"抽取特征 [{completed}/{total}]: {title_preview}")
+            
+            # 动态渲染控制台文本 ASCII 进度条
+            filled_len = int(completed * 20 // total)
+            bar_str = "█" * filled_len + "░" * (20 - filled_len)
+            yield (
+                f"⏳ [2/4] 正在并发抽取特征 ({completed}/{total} 篇 - {int(pct*100)}%)\n"
+                f"进度: [{bar_str}]\n"
+                f"最新完成: 《{title_preview}》",
+                ""
+            )
                 
         if not extracted_features:
             yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""
