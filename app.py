@@ -236,10 +236,10 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             extracted_features = current_results
             sub_pct = completed / total
             overall_pct = 0.20 + 0.55 * sub_pct
-            title_preview = (p_item.title[:35] + "...") if len(p_item.title) > 35 else p_item.title
+            title_preview = (p_item.title[:25] + "...") if len(p_item.title) > 25 else p_item.title
             
-            # 挂载 Gradio 顶部原生进度条 (平滑占据 20% - 75% 梯度)
-            progress(overall_pct, desc=f"抽取特征 [{completed}/{total}]: {title_preview}")
+            # 保持顶部原生进度条描述长度固定，防止页面高度跳动抖动
+            progress(overall_pct, desc=f"[2/4] 抽取特征 ({completed}/{total}) - {int(sub_pct*100)}%")
             
             # 动态渲染控制台文本 ASCII 进度条
             filled_len = int(completed * 20 // total)
