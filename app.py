@@ -371,12 +371,25 @@ AE/Reviewer:
     return history, ""
 
 
-def run_journal_router(draft_text: str):
-    if not draft_text or not draft_text.strip():
-        return "❌ 错误：请先输入或粘贴你的论文草稿内容！"
+def run_journal_router(router_draft_text: str, router_file_obj: Any, main_draft_text: str, main_file_obj: Any):
+    final_text = ""
+    # 优先使用路由 Tab 自带的上传文件或粘贴文本
+    if router_file_obj is not None:
+        final_text = parse_draft_input(router_draft_text, router_file_obj)
+    elif router_draft_text and router_draft_text.strip():
+        final_text = router_draft_text.strip()
+    # 若路由 Tab 为空，自动共享复用主大厅【选稿画像与循证诊断】中的文件或文本
+    elif main_file_obj is not None:
+        final_text = parse_draft_input(main_draft_text, main_file_obj)
+    elif main_draft_text and main_draft_text.strip():
+        final_text = main_draft_text.strip()
+
+    if not final_text:
+        return "❌ 错误：未检测到任何草稿内容！请在上方粘贴草稿/上传 Word 或 PDF 文件，或者在主大厅【📊 选稿画像与循证诊断】中上传草稿！"
+
     from journal_router import JournalRouter
     router = JournalRouter()
-    res = router.route_journals(draft_text)
+    res = router.route_journals(final_text)
     
     note = res.get("draft_summary_note", "论文摘要解析完成")
     tiers = res.get("recommended_tiers", [])
@@ -398,11 +411,103 @@ def run_journal_router(draft_text: str):
     return "\n".join(md_lines)
 
 
-with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
-    gr.Markdown(
+custom_css = """
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+body, .gradio-container {
+    background-color: #0b0f19 !important;
+    background-image: radial-gradient(circle at 15% 15%, rgba(59, 130, 246, 0.08) 0%, transparent 45%),
+                      radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 45%) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    color: #e2e8f0 !important;
+}
+
+.hero-banner {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.75), rgba(15, 23, 42, 0.85)) !important;
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 16px !important;
+    padding: 24px 32px !important;
+    margin-bottom: 20px !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.hero-title {
+    font-size: 2.2rem !important;
+    font-weight: 800 !important;
+    background: linear-gradient(135deg, #60a5fa 0%, #c084fc 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    margin-bottom: 6px !important;
+    letter-spacing: -0.02em !important;
+}
+
+.hero-subtitle {
+    color: #94a3b8 !important;
+    font-size: 1rem !important;
+    font-weight: 400 !important;
+}
+
+.gr-button-primary, button.primary-btn {
+    background: linear-gradient(135deg, #3b82f6 0%, #7c3aed 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.35) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.gr-button-primary:hover, button.primary-btn:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 30px rgba(124, 58, 237, 0.5) !important;
+}
+
+.tab-nav button, div.tab-nav button {
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    color: #94a3b8 !important;
+    transition: all 0.2s ease !important;
+}
+
+.tab-nav button.selected, div.tab-nav button.selected {
+    background: rgba(59, 130, 246, 0.18) !important;
+    color: #38bdf8 !important;
+    border-bottom: 2px solid #38bdf8 !important;
+}
+
+.markdown-body table {
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    margin: 16px 0 !important;
+}
+
+.markdown-body th {
+    background: rgba(30, 41, 59, 0.9) !important;
+    color: #38bdf8 !important;
+    font-weight: 600 !important;
+    padding: 12px 16px !important;
+}
+
+.markdown-body td {
+    background: rgba(15, 23, 42, 0.6) !important;
+    padding: 12px 16px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+"""
+
+with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=gr.themes.Soft(primary_hue="blue", neutral_hue="slate")) as demo:
+    gr.HTML(
         """
-        # 📊 期刊选稿画像助手 (Journal Profile Assistant)
-        **打通成果撰写与投稿优化全链路的“学术品味诊断与策略改造器”**
+        <div class="hero-banner">
+            <div class="hero-title">📊 期刊选稿画像助手 (Journal Profile Assistant)</div>
+            <div class="hero-subtitle">百篇大样本驱动的学术品味诊断、全网多期刊智能路由与投稿死穴预测大盘 —— 书生·浦砚 AI4SS 自由赛道参赛作品</div>
+        </div>
         """
     )
 
@@ -467,8 +572,21 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
 
         with gr.Tab("🧭 全网多期刊梯队智能路由"):
             gr.Markdown("### 🧭 论文草稿多期刊投递阵列路由大脑")
-            gr.Markdown("上传或粘贴你的论文草稿，系统将自动对比数据库中的候选期刊，自动评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。")
-            router_draft_input = gr.Textbox(label="粘贴你的论文草稿 (Title / Abstract / 全文)", lines=8, placeholder="在此粘贴论文草稿进行多期刊比对路由...")
+            gr.Markdown("系统将自动解析你的论文草稿（支持粘贴文本、上传 Word/PDF 文件，并全量共享主大厅的草稿与文件），对比候选期刊池评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。")
+            
+            with gr.Tabs():
+                with gr.Tab("📝 选项 A：手动粘贴摘要/草稿"):
+                    router_draft_input = gr.Textbox(
+                        label="粘贴你的论文草稿 (Title / Abstract / 全文)",
+                        lines=6,
+                        placeholder="在此粘贴论文草稿（若在主大厅已粘贴或上传文件，此处可留空，系统自动复用）..."
+                    )
+                with gr.Tab("📁 选项 B：上传草稿文件 (.docx / .pdf)"):
+                    router_file_input = gr.File(
+                        label="选择你的 Word (.docx) 或 PDF (.pdf) 文件",
+                        file_types=[".docx", ".pdf"]
+                    )
+
             router_btn = gr.Button("🧭 一键路由生成多期刊投递阵列", variant="primary")
             router_output = gr.Markdown(value="*决策阵列生成后将在此处渲染展示。*")
 
@@ -504,10 +622,10 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI") as demo:
         outputs=[status_output, report_output]
     )
 
-    # 路由大脑点击事件绑定
+    # 路由大脑点击事件绑定 (全量接入本 Tab 输入与主大厅输入)
     router_btn.click(
         fn=run_journal_router,
-        inputs=router_draft_input,
+        inputs=[router_draft_input, router_file_input, draft_input, file_input],
         outputs=router_output
     )
 
