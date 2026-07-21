@@ -5,6 +5,7 @@ import urllib3.util.connection as urllib3_cn
 import gradio as gr
 from dotenv import load_dotenv
 from datetime import datetime
+from typing import Any, Optional, Dict, List
 
 # 引入文档解析库
 import docx
