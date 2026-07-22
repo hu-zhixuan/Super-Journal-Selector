@@ -79,7 +79,7 @@ class LLMClient:
         self.api_key = api_key or os.getenv("LLM_API_KEY")
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://fxb.supa.net.cn:6443")
         self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
-        self.timeout = timeout
+        self.timeout = timeout if timeout != 60 else 15
         self.max_tokens = max_tokens
 
         # Token 与成本度量统计
@@ -205,9 +205,12 @@ class LLMClient:
                 wait_time = 0
 
                 # 若遇到 SSL EOF 协议中断或 TCP 连接池陈旧断开，自动重建 Session 并保持代理隔离
-                if "SSL" in str(e) or "Connection" in str(e):
-                    logger.warning(f"检测到 SSL/TCP 连接池异常 ({str(e)})，正在自动重建 Session 刷新连接...")
+                if "SSL" in str(e) or "Connection" in str(e) or "Timeout" in str(e):
+                    logger.warning(f"检测到 SSL/TCP 连接异常 ({str(e)})，正在自动重建 Session 刷新连接...")
                     self._init_session()
+                    if attempt >= 2 and ("Connection" in str(e) or "Timeout" in str(e) or "FileNotFoundError" in str(e)):
+                        logger.error(f"❌ 无法连接到 LLM API 服务端点 [{self.url}]！网络超时或服务端点未开启。")
+                        raise RuntimeError(f"无法连接到 LLM 服务端点 ({self.url})，网络连接超时。请检查 .env 中的 LLM_BASE_URL 是否可用。") from e
 
                 # 检查 HTTP 响应状态
                 if hasattr(e, "response") and e.response is not None:
