@@ -1,0 +1,51 @@
+[project]
+name = "journal-profile-assistant"
+version = "1.2.0"
+description = "AI-driven academic journal selection profiling assistant with 4-layer data pipeline"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "AI4SS Team"}
+]
+keywords = ["academic", "journal", "profiling", "LLM", "OpenAlex", "bibliometrics"]
+
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.0",
+    "tqdm>=4.66.0",
+    "gradio>=4.0.0",
+    "python-docx>=1.1.0",
+    "pypdf>=4.0.0",
+]
+
+[project.optional-dependencies]
+full = [
+    "pymupdf>=1.23.0",
+    "sentence-transformers>=2.2.2",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+journal-profile = "main:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

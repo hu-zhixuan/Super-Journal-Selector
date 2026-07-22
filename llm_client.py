@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import re
 import time
@@ -85,8 +85,10 @@ class LLMClient:
         self.api_key = api_key or os.getenv("LLM_API_KEY")
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://fxb.supa.net.cn:6443")
         self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
-        self.timeout = timeout if timeout != 60 else 15
+        self.timeout = timeout
         self.max_tokens = max_tokens
+        # Fallback API Key for secondary endpoint
+        self.fallback_api_key = os.getenv("LLM_FALLBACK_API_KEY", "")
 
         # Token 与成本度量统计
         self.total_prompt_tokens = 0
@@ -161,7 +163,10 @@ class LLMClient:
         if "fxb.supa.net.cn" in self.url:
             fallback_urls.append("https://api.deepseek.com/v1/messages")
 
-        for target_url in fallback_urls:
+        for url_idx, target_url in enumerate(fallback_urls):
+            # Use fallback API key for secondary endpoints
+            if url_idx > 0 and self.fallback_api_key:
+                headers["x-api-key"] = self.fallback_api_key
             for attempt in range(1, max_retries + 1):
                 try:
                     response = self.session.post(
@@ -223,8 +228,19 @@ class LLMClient:
                     if hasattr(e, "response") and e.response is not None:
                         status_code = getattr(e.response, "status_code", None)
                         if status_code in (401, 403):
-                            logger.error(f"❌ LLM API 鉴权失败 (HTTP {status_code})！请在 .env 中填入有效的 LLM_API_KEY。")
-                            raise RuntimeError(f"LLM API 鉴权失败 (HTTP {status_code})，请检查 .env 中的 LLM_API_KEY 配置。") from e
+                            # Auth failed: try next endpoint if available, else fail fast
+                            if target_url != fallback_urls[-1]:
+                                logger.warning(f"Endpoint {target_url} auth failed (HTTP {status_code}), switching to fallback...")
+                                break  # Exit retry loop, try next endpoint
+                            key_preview = self.api_key[:8] + "..." if self.api_key else "NOT_SET"
+                            logger.error(
+                                f"LLM API auth failed (HTTP {status_code})! Key prefix: {key_preview}. "
+                                f"Please check .env LLM_API_KEY or contact AI4SS Team to renew."
+                            )
+                            raise RuntimeError(
+                                f"LLM API auth failed (HTTP {status_code}). Key: {key_preview}. "
+                                f"Check .env LLM_API_KEY or set LLM_FALLBACK_API_KEY for DeepSeek official API."
+                            ) from e
                         elif status_code == 429:
                             is_rate_limit = True
                             retry_after = e.response.headers.get("Retry-After")
@@ -355,3 +371,35 @@ class LLMClient:
             "estimated_cost_usd": cost_usd,
             "estimated_cost_cny": round(cost_usd * 7.2, 5) if cost_usd is not None else None
         }
+
+    def validate_connection(self) -> Dict[str, Any]:
+        """
+        Validate API connection and key validity at startup.
+        """
+        result = {
+            "api_key_configured": bool(self.api_key and self.api_key != "your_api_key_here"),
+            "api_key_preview": (self.api_key[:8] + "...") if self.api_key else "NOT_SET",
+            "base_url": self.base_url,
+            "model": self.model,
+            "timeout": self.timeout,
+            "dns_patch_enabled": ENABLE_LLM_DNS_PATCH,
+            "fallback_configured": bool(self.fallback_api_key),
+            "connection_ok": False,
+            "error": None
+        }
+        if not result["api_key_configured"]:
+            result["error"] = "LLM_API_KEY not configured"
+            return result
+        try:
+            test_resp = self.call(
+                prompt="Reply with exactly: OK",
+                system_prompt="Connection test. Reply: OK",
+                temperature=0.0,
+                max_retries=1
+            )
+            result["connection_ok"] = True
+        except RuntimeError as e:
+            result["error"] = str(e)
+        except Exception as e:
+            result["error"] = f"{type(e).__name__}: {str(e)}"
+        return result

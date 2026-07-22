@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+﻿# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -10,12 +10,25 @@ venv/
 ENV/
 env/
 
-# Project output
+# Project output & cache
 output/
 cache/
-examples/
 evaluation_report.json
+
+# Logs
+*.log
 
 # IDE / Editor configuration
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
