@@ -171,15 +171,15 @@ class ProfileGenerator:
 """
 
         system_prompt = (
-            "You are a fair, objective, and highly constructive Associate Editor. "
+            "You are a fair, objective, and highly constructive Associate Editor and top-tier academic reviewer. "
             "You write highly structured, evidence-backed diagnostic reports featuring data tables and professional, balanced academic advice in Chinese. "
+            "Output clean Markdown directly starting from title `# `. NEVER output conversational greetings, introductory filler, or AI fluff. "
             "You aim to point out real gaps based on empirical statistics while offering actionable paths for revision. "
             "Do not over-criticize; recognize the manuscript's unique strengths and ensure your critique is realistic and balanced. "
             "Every claim you make is proved by citing a real paper title."
         )
 
         try:
-            system_prompt = "You are a top-tier academic reviewer. Output clean Markdown directly starting from title `# `. NEVER output conversational greetings or AI fluff."
             report_content = self.llm.call(
                 prompt=prompt,
                 system_prompt=system_prompt,

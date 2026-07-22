@@ -129,8 +129,7 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
 
     def rate_limit_qps(self):
         """
-        线程安全的 QPS 限速机制。在锁内部计算计划下一次允许发起请求的时间戳并释放锁，在锁外部执行 sleep。
-        避免持锁 sleep 导致多线程并发完全被强制串行化阻塞。
+        线程安全的 2 QPS 限速机制。使用时间槽平滑分配算法，消除死锁与累积延迟。
         """
         import threading
         if not FeatureExtractor._qps_lock:
@@ -139,12 +138,12 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         sleep_time = 0.0
         with FeatureExtractor._qps_lock:
             now = time.time()
-            elapsed = now - FeatureExtractor._last_req_time[0]
-            if elapsed < 0.5:
-                sleep_time = 0.5 - elapsed
-                FeatureExtractor._last_req_time[0] = now + sleep_time
+            if FeatureExtractor._last_req_time[0] <= now:
+                FeatureExtractor._last_req_time[0] = now + 0.5
+                sleep_time = 0.0
             else:
-                FeatureExtractor._last_req_time[0] = now
+                sleep_time = FeatureExtractor._last_req_time[0] - now
+                FeatureExtractor._last_req_time[0] += 0.5
 
         if sleep_time > 0:
             time.sleep(sleep_time)

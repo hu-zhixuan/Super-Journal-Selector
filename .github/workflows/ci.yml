@@ -28,12 +28,10 @@ jobs:
     - name: Run Ruff Linter
       run: |
         ruff check .
-      continue-on-error: true
 
     - name: Run Mypy Type Checker
       run: |
         mypy --ignore-missing-imports main.py fetch_papers.py extract_features.py aggregate.py generate_profile.py llm_client.py
-      continue-on-error: true
 
     - name: Run Pytest Coverage
       run: |

@@ -97,6 +97,10 @@ class LLMClient:
             "deepseek-v3": {
                 "input_per_1m_tokens": 0.14,
                 "output_per_1m_tokens": 0.28,
+            },
+            "deepseek-chat": {
+                "input_per_1m_tokens": 0.14,
+                "output_per_1m_tokens": 0.28,
             }
         }
 
@@ -109,13 +113,19 @@ class LLMClient:
             logger.warning("未检测到有效的 LLM_API_KEY。若调用 API 将导致鉴权失败，请在 .env 中正确配置。")
 
         # 使用 Session 连接池复用，提升批量请求效率
-        self.session = requests.Session()
-        self.session.trust_env = False
-        # 强行忽略系统代理环境变量
-        self.session.proxies = {
-            "http": None,
-            "https": None
-        }
+        self.session = self._create_session()
+        # SSL 验证配置：默认自动识别非标代理端口或通过 LLM_VERIFY_SSL 显式指定
+        env_verify = os.getenv("LLM_VERIFY_SSL")
+        if env_verify is not None:
+            self.verify_ssl = env_verify.lower() == "true"
+        else:
+            # 若使用了非标中转端口 6443 或 fxb 域名，默认设为 False 防止自签名证书中断
+            self.verify_ssl = not ("6443" in self.url or "fxb.supa.net.cn" in self.url)
+
+    @staticmethod
+    def _create_session() -> requests.Session:
+        session = requests.Session()
+        return session
 
     def call(
         self,
@@ -143,7 +153,8 @@ class LLMClient:
             ]
         }
 
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        if not self.verify_ssl:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -153,7 +164,7 @@ class LLMClient:
                     headers=headers,
                     json=payload,
                     timeout=self.timeout,
-                    verify=False
+                    verify=self.verify_ssl
                 )
                 response.raise_for_status()
                 
@@ -183,25 +194,33 @@ class LLMClient:
                     self.total_prompt_tokens += p_tokens
                     self.total_completion_tokens += c_tokens
                 else:
-                    # 兜底粗估，并标记来源
+                    # 兜底粗估 (兼顾英文单词与中文字符)
                     self.token_source = "estimated"
-                    self.total_prompt_tokens += len(prompt.split()) + len(system_prompt.split())
-                    self.total_completion_tokens += len(text.split())
+                    def estimate_tokens(t: str) -> int:
+                        cjk_chars = len(re.findall(r'[\u4e00-\u9fff]', t))
+                        words = len(re.findall(r'\b[a-zA-Z0-9]+\b', t))
+                        return int(cjk_chars * 1.5 + words * 1.3 + 1)
+                    self.total_prompt_tokens += estimate_tokens(prompt) + estimate_tokens(system_prompt)
+                    self.total_completion_tokens += estimate_tokens(text)
 
                 return text
 
             except Exception as e:
-                # 若遇到 SSL EOF 协议中断或 TCP 连接池陈旧断开，自动重建 Session 清除脏连接
-                if "SSL" in str(e) or "Connection" in str(e):
-                    logger.warning(f"检测到 SSL/TCP 连接池异常 ({str(e)})，正在自动重建 Session 刷新连接...")
-                    self.session = requests.Session()
-
                 is_rate_limit = False
                 wait_time = 0
-                
-                # 检查是否为 HTTP 429 速率限制错误，并读取 Retry-After 头
+
+                # 若遇到 SSL EOF 协议中断或 TCP 连接池陈旧断开，自动重建 Session 刷新连接并保留代理隔离设置
+                if "SSL" in str(e) or "Connection" in str(e):
+                    logger.warning(f"检测到 SSL/TCP 连接池异常 ({str(e)})，正在自动重建 Session 刷新连接...")
+                    self.session = self._create_session()
+
+                # 检查 HTTP 响应状态
                 if hasattr(e, "response") and e.response is not None:
-                    if getattr(e.response, "status_code", None) == 429:
+                    status_code = getattr(e.response, "status_code", None)
+                    if status_code in (401, 403):
+                        logger.error(f"❌ LLM API 鉴权失败 (HTTP {status_code})！请在 .env 中填入有效的 LLM_API_KEY。")
+                        raise RuntimeError(f"LLM API 鉴权失败 (HTTP {status_code})，请检查 .env 中的 LLM_API_KEY 配置。") from e
+                    elif status_code == 429:
                         is_rate_limit = True
                         retry_after = e.response.headers.get("Retry-After")
                         if retry_after:
@@ -216,7 +235,7 @@ class LLMClient:
                     logger.warning(f"LLM API 接入调用失败 (尝试 {attempt}/{max_retries}): {str(e)}")
 
                 if attempt == max_retries:
-                    raise RuntimeError(f"All LLM API retry attempts failed. Last error: {e}") from e
+                    raise RuntimeError(f"All LLM API retry attempts failed ({max_retries} attempts). Last error: {e}") from e
 
                 # 避让逻辑
                 sleep_time = wait_time if wait_time > 0 else (2 ** attempt) + random.uniform(0.5, 2.0)
@@ -309,16 +328,17 @@ class LLMClient:
         """
         获取当前的 API 调用次数、Token 消耗及预估费用。
         """
-        pricing = self.MODEL_PRICING.get(self.model)
-        cost_usd = None
-        if pricing:
-            in_rate = pricing.get("input_per_1m_tokens", 0.1)
-            out_rate = pricing.get("output_per_1m_tokens", 0.2)
-            cost_usd = round(
-                (self.total_prompt_tokens / 1_000_000.0) * in_rate +
-                (self.total_completion_tokens / 1_000_000.0) * out_rate,
-                6
-            )
+        pricing = self.MODEL_PRICING.get(self.model, {
+            "input_per_1m_tokens": 0.14,
+            "output_per_1m_tokens": 0.28,
+        })
+        in_rate = pricing.get("input_per_1m_tokens", 0.14)
+        out_rate = pricing.get("output_per_1m_tokens", 0.28)
+        cost_usd = round(
+            (self.total_prompt_tokens / 1_000_000.0) * in_rate +
+            (self.total_completion_tokens / 1_000_000.0) * out_rate,
+            6
+        )
         return {
             "total_api_calls": self.total_api_calls,
             "total_prompt_tokens": self.total_prompt_tokens,

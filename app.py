@@ -53,7 +53,6 @@ def parse_pdf(file_path: str) -> str:
         doc = fitz.open(file_path)
         text_list = []
         for page in doc:
-            # 使用 layout 模式可以更好地保持学术排版、公式和多栏文字顺序
             page_text = page.get_text("layout")
             if page_text:
                 text_list.append(page_text)
@@ -78,6 +77,20 @@ def parse_pdf(file_path: str) -> str:
     except Exception as e:
         logger.error(f"PyMuPDF 解析 PDF 失败: {e}")
         return f"[PDF 解析失败]: {str(e)}"
+
+
+def parse_draft_input(draft_text: str, file_obj: Any) -> str:
+    """
+    统一解析用户输入的草稿文本或上传的文件（支持 .docx 与 .pdf）
+    """
+    if file_obj is not None:
+        file_path = getattr(file_obj, "name", str(file_obj))
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".docx":
+            return parse_docx(file_path)
+        elif ext == ".pdf":
+            return parse_pdf(file_path)
+    return draft_text.strip() if draft_text else ""
 
 
 # 学术圈高频缩写与中文俗称/别名智能映射字典
@@ -407,32 +420,90 @@ def run_journal_router(router_draft_text: str, router_file_obj: Any, main_draft_
 custom_css = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ===== Force Light Mode (override system dark mode) ===== */
-:root, .dark, [data-theme="dark"] {
+/* ===== Force Harmonized Modern Light Mode (Fix Dark Input Mismatch) ===== */
+:root, body, .dark, [data-theme="dark"], .gradio-container, .gradio-container.dark {
+    --body-background-fill: #f8fafc !important;
     --background-fill-primary: #f8fafc !important;
     --background-fill-secondary: #ffffff !important;
     --block-background-fill: #ffffff !important;
     --block-border-color: #e2e8f0 !important;
-    --body-background-fill: #f8fafc !important;
     --body-text-color: #1e293b !important;
+    --body-text-color-subdued: #64748b !important;
     --color-accent: #4f46e5 !important;
+    --color-accent-soft: #eef2ff !important;
+    
+    /* Input Variables Fix */
+    --input-background-fill: #ffffff !important;
+    --input-background-fill-focus: #ffffff !important;
+    --input-border-color: #cbd5e1 !important;
+    --input-border-color-focus: #6366f1 !important;
+    --input-text-color: #0f172a !important;
+    
+    /* Label & Badge Variables Fix */
+    --block-label-background-fill: #eef2ff !important;
+    --block-label-text-color: #4338ca !important;
+    --block-label-border-color: #c7d2fe !important;
+    --block-title-text-color: #1e293b !important;
+    
+    /* Neutral Palette Force Light */
+    --neutral-50: #f8fafc !important;
+    --neutral-100: #f1f5f9 !important;
+    --neutral-200: #e2e8f0 !important;
+    --neutral-300: #cbd5e1 !important;
+    --neutral-400: #94a3b8 !important;
+    --neutral-500: #64748b !important;
+    --neutral-600: #475569 !important;
     --neutral-700: #334155 !important;
     --neutral-800: #1e293b !important;
     --neutral-900: #0f172a !important;
     --neutral-950: #020617 !important;
+    
     color-scheme: light !important;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root, .dark, [data-theme="dark"] {
-        --background-fill-primary: #f8fafc !important;
-        --background-fill-secondary: #ffffff !important;
-        --block-background-fill: #ffffff !important;
-        --block-border-color: #e2e8f0 !important;
-        --body-background-fill: #f8fafc !important;
-        --body-text-color: #1e293b !important;
-        color-scheme: light !important;
-    }
+/* ===== Hard Override for Textareas, Inputs, Dropdowns ===== */
+.gradio-container textarea,
+.gradio-container input[type="text"],
+.gradio-container input[type="number"],
+.gradio-container select,
+.gradio-container .gr-input,
+.gradio-container .gr-text-input,
+.gradio-container .input-container,
+.gradio-container .secondary-wrap,
+.gradio-container [data-testid="textbox"],
+.gradio-container [data-testid="dropdown"],
+.gradio-container [data-testid="number-input"],
+.gradio-container fieldset {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+}
+
+.gradio-container textarea:focus,
+.gradio-container input[type="text"]:focus,
+.gradio-container input[type="number"]:focus,
+.gradio-container select:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15) !important;
+    outline: none !important;
+}
+
+.gradio-container textarea::placeholder,
+.gradio-container input::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* ===== Labels & Badges Fix ===== */
+.gradio-container span[data-testid="block-label"],
+.gradio-container label > span,
+.gradio-container .label-text,
+.gradio-container .group-label {
+    background-color: #eef2ff !important;
+    color: #4338ca !important;
+    font-weight: 600 !important;
+    border: 1px solid #c7d2fe !important;
+    border-radius: 6px !important;
 }
 
 /* ===== Global Background & Typography ===== */
@@ -443,7 +514,7 @@ html, body, .gradio-container, .gradio-container.dark {
     color: #1e293b !important;
 }
 
-/* Force all Gradio blocks/panels to light */
+/* Force all Gradio blocks/panels to clean white */
 .gradio-container .block, .gradio-container .form,
 .gradio-container [data-testid="column"],
 .gradio-container .gr-panel,
@@ -453,72 +524,48 @@ html, body, .gradio-container, .gradio-container.dark {
     color: #1e293b !important;
 }
 
-/* Force labels and text to dark on light */
-.gradio-container label, .gradio-container .label-text,
-.gradio-container span, .gradio-container p,
-.gradio-container .gr-input-label {
-    color: #334155 !important;
-}
-
-/* Force inner tabs (sub-tabs) to light */
-.gradio-container .tab-nav {
-    background-color: #f1f5f9 !important;
-    border-color: #e2e8f0 !important;
-}
-
-.gradio-container .tab-nav button {
-    color: #64748b !important;
-    background-color: transparent !important;
-}
-
-.gradio-container .tab-nav button.selected {
-    background-color: #ffffff !important;
-    color: #4f46e5 !important;
-    border-color: #4f46e5 !important;
-}
-
 /* ===== Hero Banner ===== */
 .hero-banner {
-    background: #ffffff;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 32px 40px;
     margin-bottom: 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
 }
 
 .hero-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: #1e293b;
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: #0f172a;
     margin-bottom: 8px;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
 }
 
 .hero-subtitle {
-    color: #64748b;
-    font-size: 0.95rem;
+    color: #475569;
+    font-size: 0.98rem;
     font-weight: 400;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
 /* ===== Buttons ===== */
 .gr-button-primary, button.primary {
-    background: #4f46e5 !important;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
     border: none !important;
     color: #ffffff !important;
     font-weight: 600 !important;
-    font-size: 0.9rem !important;
+    font-size: 0.95rem !important;
     border-radius: 8px !important;
-    padding: 10px 20px !important;
-    box-shadow: 0 1px 2px rgba(79, 70, 229, 0.2) !important;
+    padding: 12px 24px !important;
+    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25) !important;
     transition: all 0.2s ease !important;
 }
 
 .gr-button-primary:hover, button.primary:hover {
-    background: #4338ca !important;
+    background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%) !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25) !important;
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3) !important;
 }
 
 /* ===== Tabs ===== */
@@ -535,24 +582,6 @@ html, body, .gradio-container, .gradio-container.dark {
     color: #4f46e5 !important;
     border-bottom: 2px solid #4f46e5 !important;
     font-weight: 600 !important;
-}
-
-/* ===== Cards & Panels ===== */
-.gr-panel, .gr-box, div[data-testid="column"] {
-    border-radius: 10px !important;
-}
-
-/* ===== Inputs ===== */
-.gr-input, .gr-text-input, textarea, input[type="text"] {
-    border: 1px solid #d1d5db !important;
-    border-radius: 8px !important;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
-}
-
-.gr-input:focus, .gr-text-input:focus, textarea:focus, input[type="text"]:focus {
-    border-color: #4f46e5 !important;
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
-    outline: none !important;
 }
 
 /* ===== Tables ===== */
@@ -607,7 +636,7 @@ html, body, .gradio-container, .gradio-container.dark {
 
 /* ===== File Upload ===== */
 .gr-file-upload, [data-testid="file"] {
-    border: 2px dashed #d1d5db !important;
+    border: 2px dashed #cbd5e1 !important;
     border-radius: 10px !important;
     background: #fafbfc !important;
     transition: border-color 0.2s ease !important;
@@ -665,9 +694,10 @@ app_theme = gr.themes.Soft(
     button_secondary_background_fill="#f1f5f9",
     button_secondary_background_fill_hover="#e2e8f0",
     input_background_fill="#ffffff",
-    input_border_color="#d1d5db",
-    input_border_color_focus="#4f46e5",
+    input_border_color="#cbd5e1",
+    input_border_color_focus="#6366f1",
 )
+
 
 with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=app_theme) as demo:
     gr.HTML(

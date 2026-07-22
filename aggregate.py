@@ -68,20 +68,26 @@ class ProfileAggregator:
         """
         BoW 词频余弦相似度计算，内置英文常用停用词（Stop Words）过滤降噪
         """
-        # 内置 70+ 词学术常见停用词表
+        # 内置中英文学术常见停用词表
         stop_words = {
             'the', 'a', 'an', 'and', 'or', 'but', 'if', 'then', 'else', 'when', 'at', 'by', 'from', 'in', 'on', 'to',
             'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above',
             'below', 'of', 'up', 'down', 'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
             'having', 'do', 'does', 'did', 'doing', 'can', 'could', 'should', 'would', 'will', 'i', 'me', 'my', 'we',
             'our', 'us', 'you', 'your', 'he', 'him', 'his', 'she', 'her', 'it', 'its', 'they', 'them', 'their', 'this',
-            'that', 'these', 'those', 'which', 'who', 'whom', 'as', 'than', 'such', 'both', 'each', 'either', 'neither'
+            'that', 'these', 'those', 'which', 'who', 'whom', 'as', 'than', 'such', 'both', 'each', 'either', 'neither',
+            '的', '了', '在', '是', '和', '与', '于', '对', '等', '及', '中', '或', '有', '为', '以', '上', '下'
         }
         
         def get_word_freq(t: str) -> Dict[str, int]:
-            words = re.sub(r"\W+", " ", t.lower()).split()
+            # 提取英文单词
+            words = re.sub(r"[^\w\s]", " ", t.lower()).split()
             filtered_words = [w for w in words if w and w not in stop_words and not w.isdigit()]
-            return Counter(filtered_words)
+            # 提取 CJK 中文字符 bigrams
+            cjk_chars = re.findall(r'[\u4e00-\u9fff]', t)
+            cjk_bigrams = [cjk_chars[i] + cjk_chars[i+1] for i in range(len(cjk_chars)-1)]
+            filtered_cjk = [b for b in cjk_bigrams if not any(w in stop_words for w in b)]
+            return Counter(filtered_words + filtered_cjk)
 
         freq1 = get_word_freq(text1)
         freq2 = get_word_freq(text2)
@@ -91,8 +97,8 @@ class ProfileAggregator:
             return 0.0
             
         dot_product = sum(freq1.get(w, 0) * freq2.get(w, 0) for w in all_words)
-        magnitude1 = sum(freq1.get(w, 0) ** 2 for w in all_words) ** 0.5
-        magnitude2 = sum(freq2.get(w, 0) ** 2 for w in all_words) ** 0.5
+        magnitude1 = sum(v ** 2 for v in freq1.values()) ** 0.5
+        magnitude2 = sum(v ** 2 for v in freq2.values()) ** 0.5
         
         if not magnitude1 or not magnitude2:
             return 0.0

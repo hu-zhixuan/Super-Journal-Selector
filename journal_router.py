@@ -26,7 +26,7 @@ class JournalRouter:
         """
         if not candidate_journals:
             # 从本地 journal_partitions.json 中读取内置候选期刊库
-            partition_file = "journal_partitions.json"
+            partition_file = os.path.join(os.path.dirname(__file__), "journal_partitions.json")
             if os.path.exists(partition_file):
                 try:
                     with open(partition_file, "r", encoding="utf-8") as f:

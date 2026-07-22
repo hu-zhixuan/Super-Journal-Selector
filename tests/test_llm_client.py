@@ -15,7 +15,7 @@ class TestLLMClient(unittest.TestCase):
         self.assertEqual(len(fp1), 10)
 
     def test_cost_statistics(self):
-        client = LLMClient()
+        client = LLMClient(model="deepseek-v4-flash")
         client.total_prompt_tokens = 1_000_000
         client.total_completion_tokens = 1_000_000
         client.total_api_calls = 5
