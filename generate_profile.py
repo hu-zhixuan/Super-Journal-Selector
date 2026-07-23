@@ -180,10 +180,14 @@ class ProfileGenerator:
         )
 
         try:
+            # 长报告生成：输入为百篇聚合数据+长模板，输出数千 tokens，
+            # 单独放宽至 300s / 8000 tokens，避免默认 60s 超时反复失败
             report_content = self.llm.call(
                 prompt=prompt,
                 system_prompt=system_prompt,
-                temperature=0.18
+                temperature=0.18,
+                timeout=300,
+                max_tokens=8000
             )
             
             # 自动清洗掉 AI 常见的寒暄套话前缀 (如 "好的，作者。作为...编委...")

@@ -71,14 +71,15 @@ class LLMClient:
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
         model: Optional[str] = None,
-        timeout: int = 60,
-        max_tokens: int = 4000
+        timeout: Optional[int] = None,
+        max_tokens: Optional[int] = None
     ):
         self.api_key = api_key or os.getenv("LLM_API_KEY")
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://fxb.supa.net.cn:6443")
         self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
-        self.timeout = timeout
-        self.max_tokens = max_tokens
+        # 可用 LLM_TIMEOUT / LLM_MAX_TOKENS 环境变量全局调整（长报告生成在调用处单独放宽）
+        self.timeout = timeout if timeout is not None else int(os.getenv("LLM_TIMEOUT", "60"))
+        self.max_tokens = max_tokens if max_tokens is not None else int(os.getenv("LLM_MAX_TOKENS", "4000"))
         self.fallback_api_key = os.getenv("LLM_FALLBACK_API_KEY", "")
 
         # API 格式: "openai" (默认) 或 "anthropic"
@@ -163,12 +164,13 @@ class LLMClient:
                 "content-type": "application/json"
             }
 
-    def _build_payload(self, prompt: str, system_prompt: str, temperature: float) -> Dict[str, Any]:
+    def _build_payload(self, prompt: str, system_prompt: str, temperature: float, max_tokens: Optional[int] = None) -> Dict[str, Any]:
         """根据 API 格式构建请求体"""
+        mt = max_tokens or self.max_tokens
         if self.api_format == "anthropic":
             return {
                 "model": self.model,
-                "max_tokens": self.max_tokens,
+                "max_tokens": mt,
                 "temperature": temperature,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": prompt}]
@@ -176,7 +178,7 @@ class LLMClient:
         else:
             return {
                 "model": self.model,
-                "max_tokens": self.max_tokens,
+                "max_tokens": mt,
                 "temperature": temperature,
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -218,6 +220,8 @@ class LLMClient:
         system_prompt: str = "You are a helpful academic research assistant.",
         temperature: float = 0.3,
         max_retries: int = 5,
+        timeout: Optional[int] = None,
+        max_tokens: Optional[int] = None,
     ) -> str:
         """发起 LLM API 请求（自动适配 OpenAI / Anthropic 格式）"""
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -233,9 +237,11 @@ class LLMClient:
             else:
                 endpoints.append(("https://api.deepseek.com/v1/chat/completions", fallback_key))
 
+        effective_timeout = timeout or self.timeout
+
         for url_idx, (target_url, active_key) in enumerate(endpoints):
             headers = self._build_headers(active_key)
-            payload = self._build_payload(prompt, system_prompt, temperature)
+            payload = self._build_payload(prompt, system_prompt, temperature, max_tokens=max_tokens)
 
             for attempt in range(1, max_retries + 1):
                 try:
@@ -243,7 +249,7 @@ class LLMClient:
                         target_url,
                         headers=headers,
                         json=payload,
-                        timeout=self.timeout,
+                        timeout=effective_timeout,
                         verify=False
                     )
                     response.raise_for_status()
