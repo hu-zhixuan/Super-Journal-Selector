@@ -198,6 +198,8 @@ class LLMClient:
             # OpenAI format
             choices = resp_data.get("choices", [])
             if choices:
+                if choices[0].get("finish_reason") == "length":
+                    logger.warning("LLM 输出达到 max_tokens 上限被截断，可能导致 JSON 不完整。")
                 message = choices[0].get("message", {})
                 return (message.get("content") or "").strip()
             return ""
@@ -326,6 +328,9 @@ class LLMClient:
 
     def extract_json_from_text(self, raw_output: str) -> Dict[str, Any]:
         """强力提取文本中的 JSON 部分，支持 markdown、object 和 array。"""
+        # 剥离思维链输出（DeepSeek thinking 等），防止思考文本中的花括号干扰 JSON 边界定位
+        raw_output = re.sub(r"<think>.*?</think>", "", raw_output, flags=re.DOTALL).strip()
+
         candidates = []
 
         code_block = re.search(r"```(?:json)?\s*(.*?)\s*```", raw_output, re.DOTALL)
@@ -352,6 +357,9 @@ class LLMClient:
             except json.JSONDecodeError:
                 continue
 
+        # 记录原始输出片段便于诊断模型实际返回内容（如纯文本、截断、异常页面）
+        preview = raw_output[:300].replace("\n", " ")
+        logger.warning(f"JSON 提取失败，LLM 原始输出前300字符: {preview}")
         raise ValueError("LLM 返回内容中不包含任何合法的 JSON 结构")
 
     def call_json(
