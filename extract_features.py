@@ -90,7 +90,7 @@ class FeatureExtractor:
             except Exception as e_cache:
                 logger.warning(f"读取论文特征缓存失败: {e_cache}")
 
-        # 使用 QPS 限速保护 API 不被频限 (频率控制：2 QPS)
+        # 使用 QPS 限速保护 API 不被频限（默认 4 QPS，可用 LLM_EXTRACT_QPS 调整）
         self.rate_limit_qps()
 
         prompt = f"""
@@ -127,34 +127,53 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
     _qps_lock = threading.Lock() if 'threading' in globals() else None
     _last_req_time = [0.0]
 
+    @staticmethod
+    def _get_qps_limit() -> float:
+        """LLM 提取限速（次/秒），默认 4 QPS，可用环境变量 LLM_EXTRACT_QPS 调整"""
+        try:
+            return max(0.5, float(os.getenv("LLM_EXTRACT_QPS", "4")))
+        except ValueError:
+            return 4.0
+
+    @staticmethod
+    def _get_max_workers() -> int:
+        """特征提取并发线程数，默认 8，可用环境变量 LLM_EXTRACT_WORKERS 调整"""
+        try:
+            return max(1, int(os.getenv("LLM_EXTRACT_WORKERS", "8")))
+        except ValueError:
+            return 8
+
     def rate_limit_qps(self):
         """
-        线程安全的 2 QPS 限速机制。使用时间槽平滑分配算法，消除死锁与累积延迟。
+        线程安全的 QPS 限速机制（默认 4 QPS）。使用时间槽平滑分配算法，消除死锁与累积延迟。
         """
         import threading
         if not FeatureExtractor._qps_lock:
             FeatureExtractor._qps_lock = threading.Lock()
         
+        interval = 1.0 / self._get_qps_limit()
         sleep_time = 0.0
         with FeatureExtractor._qps_lock:
             now = time.time()
             if FeatureExtractor._last_req_time[0] <= now:
-                FeatureExtractor._last_req_time[0] = now + 0.5
+                FeatureExtractor._last_req_time[0] = now + interval
                 sleep_time = 0.0
             else:
                 sleep_time = FeatureExtractor._last_req_time[0] - now
-                FeatureExtractor._last_req_time[0] += 0.5
+                FeatureExtractor._last_req_time[0] += interval
 
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    def extract_batch_iter(self, papers: List[PaperRecord], max_workers: int = 2):
+    def extract_batch_iter(self, papers: List[PaperRecord], max_workers: Optional[int] = None):
         """
         生成器版本的 extract_batch，每完成一篇论文特征抽取，就 yield (completed_count, total_count, paper, extracted_results)
         便于 WebUI / CLI 实时接收并更新百分比进度条与状态展示。
         """
         import threading
         from datetime import datetime
+        if max_workers is None:
+            max_workers = self._get_max_workers()
         logger.info(f"开始开启并发线程池 (Workers={max_workers})，批量结构化解析 {len(papers)} 篇大样本论文特征...")
         extracted_results: List[Dict[str, Any]] = []
         self.failed_papers = []
@@ -204,7 +223,7 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
 
         logger.info(f"并发解析完成，成功获得 {len(extracted_results)}/{total_count} 篇大样本有效特征实体。")
 
-    def extract_batch(self, papers: List[PaperRecord], max_workers: int = 3) -> List[Dict[str, Any]]:
+    def extract_batch(self, papers: List[PaperRecord], max_workers: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         利用多线程池并发批量解析大样本论文列表，实现百篇级高频特征极速结构化抽取
         """
