@@ -7,4 +7,6 @@ python-docx>=1.1.0
 pypdf>=4.0.0
 pymupdf>=1.23.0
 sentence-transformers>=2.2.2
+# Optional: CN users may pre-download the embedding model via ModelScope (see README FAQ)
+# modelscope>=1.20.0
 

@@ -1,3 +1,4 @@
+import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
 import os
 import logging
 import requests

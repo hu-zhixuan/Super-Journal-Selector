@@ -8,6 +8,9 @@ from collections import Counter
 import statistics
 from datetime import datetime
 
+# 须在 sentence_transformers 之前导入，确保 HF 镜像设置在 huggingface_hub 固化常量前生效
+import network_config
+
 # 尝试导入 sentence-transformers 以支持高精度语义向量计算
 try:
     from sentence_transformers import SentenceTransformer, util
@@ -239,8 +242,10 @@ class ProfileAggregator:
             # 使用 sentence-transformers 计算高维编码
             if use_semantic:
                 try:
-                    logger.info("正在初始化 SentenceTransformer ('all-MiniLM-L6-v2') 提取语义特征对标向量...")
-                    model = SentenceTransformer('all-MiniLM-L6-v2')
+                    # 本地缓存（ModelScope/自定义路径）优先，避免 huggingface 下载卡死
+                    model_path = network_config.resolve_embedding_model_path('all-MiniLM-L6-v2')
+                    logger.info(f"正在初始化 SentenceTransformer ('{model_path}') 提取语义特征对标向量...")
+                    model = SentenceTransformer(model_path)
                     draft_emb = model.encode(user_draft_text, convert_to_tensor=True)
                     
                     from llm_client import EMBEDDING_MODEL_NAME
