@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 import re
 import time
@@ -27,7 +27,6 @@ DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
     if host == "fxb.supa.net.cn" and DEFAULT_DIRECT_IP:
-        # 尝试强制导向物理 IP，如果失败则回退至标准 DNS 域名解析
         try:
             return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
         except Exception:
@@ -35,10 +34,6 @@ def patched_create_connection(address, *args, **kwargs):
     return urllib3_cn._orig_create_connection(address, *args, **kwargs)
 
 def install_dns_patch():
-    """
-    显式安装 Socket 层 DNS 直连补丁。
-    默认由环境变量 ENABLE_LLM_DNS_PATCH 控制。
-    """
     if ENABLE_LLM_DNS_PATCH:
         if not hasattr(urllib3_cn, "_orig_create_connection"):
             urllib3_cn._orig_create_connection = urllib3_cn.create_connection
@@ -47,7 +42,6 @@ def install_dns_patch():
     else:
         logger.info("Socket DNS 直连补丁处于关闭状态（按需开启）")
 
-# 执行初始化补丁检查
 install_dns_patch()
 # ===============================================================
 
@@ -60,9 +54,6 @@ REPORT_PROMPT_VERSION = "v2.0"
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 def get_prompt_fingerprint(prompt_version: str, model_name: str, temperature: float, system_prompt: str) -> str:
-    """
-    基于 Prompt 版本、模型名、温度和系统 Prompt 串生成 10 位指纹，防止缓存被旧 Prompt 污染。
-    """
     raw_str = f"{prompt_version}:{model_name}:{temperature}:{system_prompt}"
     return hashlib.md5(raw_str.encode("utf-8")).hexdigest()[:10]
 # ===============================================================
@@ -70,8 +61,9 @@ def get_prompt_fingerprint(prompt_version: str, model_name: str, temperature: fl
 
 class LLMClient:
     """
-    统一封装的 LLM 客户端，适配 Anthropic Messages API 格式 (/v1/messages)。
-    支持 requests.Session 连接池复用、超时及最大 token 可配置、JSON 解析重试修复。
+    统一封装的 LLM 客户端，自动适配 OpenAI / Anthropic 两种 API 格式。
+    默认使用 OpenAI Chat Completions 格式（适配大多数中国 LLM 代理），
+    可通过 LLM_API_FORMAT=anthropic 切换为 Anthropic Messages 格式。
     """
 
     def __init__(
@@ -87,16 +79,18 @@ class LLMClient:
         self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
         self.timeout = timeout
         self.max_tokens = max_tokens
-        # Fallback API Key for secondary endpoint
         self.fallback_api_key = os.getenv("LLM_FALLBACK_API_KEY", "")
+
+        # API 格式: "openai" (默认) 或 "anthropic"
+        self.api_format = os.getenv("LLM_API_FORMAT", "openai").lower()
 
         # Token 与成本度量统计
         self.total_prompt_tokens = 0
         self.total_completion_tokens = 0
         self.total_api_calls = 0
-        self.token_source = "api"  # "api" 或 "estimated"
+        self.token_source = "api"
 
-        # 模型单价映射表 (输入 / 输出每百万 Token 费率，以美元计)
+        # 模型单价映射表
         self.MODEL_PRICING = {
             "deepseek-v4-flash": {
                 "input_per_1m_tokens": 0.1,
@@ -109,27 +103,112 @@ class LLMClient:
             "deepseek-chat": {
                 "input_per_1m_tokens": 0.14,
                 "output_per_1m_tokens": 0.28,
-            }
+            },
+            "minimax-2.7": {
+                "input_per_1m_tokens": 0.1,
+                "output_per_1m_tokens": 0.2,
+            },
         }
 
-        # 规范化 Base URL 路径
-        self.url = self.base_url.rstrip("/")
-        if not self.url.endswith("/v1/messages"):
-            self.url = f"{self.url}/v1/messages"
+        # 规范化 URL
+        self.url = self._build_url(self.base_url)
 
         if not self.api_key or self.api_key == "your_api_key_here":
             logger.warning("未检测到有效的 LLM_API_KEY。若调用 API 将导致鉴权失败，请在 .env 中正确配置。")
 
-        # 使用 Session 连接池复用，提升批量请求效率 (原作者隔离代理设计)
         self._init_session()
+
+    def _build_url(self, base: str) -> str:
+        """根据 API 格式构建请求 URL"""
+        url = base.rstrip("/")
+        if self.api_format == "anthropic":
+            if not url.endswith("/v1/messages"):
+                # 如果已含 /v1 但不是 /v1/messages，替换；否则追加
+                if url.endswith("/v1"):
+                    url = url + "/messages"
+                elif "/v1/" in url:
+                    pass  # 已有自定义路径，不动
+                else:
+                    url = url + "/v1/messages"
+        else:
+            # OpenAI 格式
+            if not url.endswith("/v1/chat/completions"):
+                if url.endswith("/v1"):
+                    url = url + "/chat/completions"
+                elif "/v1/chat/completions" in url:
+                    pass
+                elif "/v1/" in url:
+                    # 去掉旧的 /v1/xxx，替换为 /v1/chat/completions
+                    url = url[:url.index("/v1/")] + "/v1/chat/completions"
+                else:
+                    url = url + "/v1/chat/completions"
+        return url
 
     def _init_session(self):
         self.session = requests.Session()
         self.session.trust_env = False
-        self.session.proxies = {
-            "http": None,
-            "https": None
-        }
+        self.session.proxies = {"http": None, "https": None}
+
+    def _build_headers(self, api_key: str) -> Dict[str, str]:
+        """根据 API 格式构建请求头"""
+        if self.api_format == "anthropic":
+            return {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            }
+        else:
+            return {
+                "Authorization": f"Bearer {api_key}",
+                "content-type": "application/json"
+            }
+
+    def _build_payload(self, prompt: str, system_prompt: str, temperature: float) -> Dict[str, Any]:
+        """根据 API 格式构建请求体"""
+        if self.api_format == "anthropic":
+            return {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": temperature,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": prompt}]
+            }
+        else:
+            return {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "temperature": temperature,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+            }
+
+    def _parse_response(self, resp_data: Dict[str, Any]) -> str:
+        """根据 API 格式解析响应文本"""
+        if self.api_format == "anthropic":
+            content_list = resp_data.get("content", [])
+            text_parts = [
+                block.get("text", "")
+                for block in content_list
+                if isinstance(block, dict) and block.get("type") == "text"
+            ]
+            return "".join(text_parts).strip()
+        else:
+            # OpenAI format
+            choices = resp_data.get("choices", [])
+            if choices:
+                message = choices[0].get("message", {})
+                return (message.get("content") or "").strip()
+            return ""
+
+    def _parse_usage(self, resp_data: Dict[str, Any]) -> tuple:
+        """解析 token 使用量，返回 (prompt_tokens, completion_tokens)"""
+        usage = resp_data.get("usage", {})
+        if self.api_format == "anthropic":
+            return (usage.get("input_tokens", 0), usage.get("output_tokens", 0))
+        else:
+            return (usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
 
     def call(
         self,
@@ -138,35 +217,24 @@ class LLMClient:
         temperature: float = 0.3,
         max_retries: int = 5,
     ) -> str:
-        """
-        发起 Anthropic Messages 协议请求
-        """
-        headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
-        }
-
-        payload = {
-            "model": self.model,
-            "max_tokens": self.max_tokens,
-            "temperature": temperature,
-            "system": system_prompt,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ]
-        }
-
+        """发起 LLM API 请求（自动适配 OpenAI / Anthropic 格式）"""
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-        fallback_urls = [self.url]
+        # 构建端点列表
+        endpoints = []
+        endpoints.append((self.url, self.api_key))
+        # 如果主端点是 fxb 代理，添加 DeepSeek 官方作为备用
         if "fxb.supa.net.cn" in self.url:
-            fallback_urls.append("https://api.deepseek.com/v1/messages")
+            fallback_key = self.fallback_api_key or self.api_key
+            if self.api_format == "anthropic":
+                endpoints.append(("https://api.deepseek.com/v1/messages", fallback_key))
+            else:
+                endpoints.append(("https://api.deepseek.com/v1/chat/completions", fallback_key))
 
-        for url_idx, target_url in enumerate(fallback_urls):
-            # Use fallback API key for secondary endpoints
-            if url_idx > 0 and self.fallback_api_key:
-                headers["x-api-key"] = self.fallback_api_key
+        for url_idx, (target_url, active_key) in enumerate(endpoints):
+            headers = self._build_headers(active_key)
+            payload = self._build_payload(prompt, system_prompt, temperature)
+
             for attempt in range(1, max_retries + 1):
                 try:
                     response = self.session.post(
@@ -177,34 +245,24 @@ class LLMClient:
                         verify=False
                     )
                     response.raise_for_status()
-                    
+
                     resp_data = response.json()
-                    
-                    # 警告输出截断
+
                     if resp_data.get("stop_reason") == "max_tokens":
                         logger.warning("LLM 输出被 max_tokens 截断，可能导致后续 JSON 或文本内容解析不全。")
 
-                    content_list = resp_data.get("content", [])
-                    text_parts = [
-                        block.get("text", "")
-                        for block in content_list
-                        if isinstance(block, dict) and block.get("type") == "text"
-                    ]
-                    text = "".join(text_parts).strip()
+                    text = self._parse_response(resp_data)
                     if not text:
                         logger.error(f"API 响应结构异常，文本内容为空: {resp_data}")
-                        raise ValueError("Anthropic API 返回内容为空")
+                        raise ValueError("LLM API 返回内容为空")
 
-                    # 解析统计使用量数据
-                    usage = resp_data.get("usage", {})
-                    p_tokens = usage.get("input_tokens", usage.get("prompt_tokens", 0))
-                    c_tokens = usage.get("output_tokens", usage.get("completion_tokens", 0))
+                    # 统计 token 用量
+                    p_tokens, c_tokens = self._parse_usage(resp_data)
                     self.total_api_calls += 1
                     if p_tokens or c_tokens:
                         self.total_prompt_tokens += p_tokens
                         self.total_completion_tokens += c_tokens
                     else:
-                        # 兜底粗估 (兼顾英文单词与中文字符)
                         self.token_source = "estimated"
                         def estimate_tokens(t: str) -> int:
                             cjk_chars = len(re.findall(r'[\u4e00-\u9fff]', t))
@@ -219,27 +277,24 @@ class LLMClient:
                     is_rate_limit = False
                     wait_time = 0
 
-                    # 若遇到 SSL EOF 协议中断或 TCP 连接池陈旧断开，自动重建 Session 并保持代理隔离
                     if "SSL" in str(e) or "Connection" in str(e) or "Timeout" in str(e):
                         logger.warning(f"检测到 SSL/TCP 连接异常 ({str(e)})，正在自动重建 Session 刷新连接...")
                         self._init_session()
 
-                    # 检查 HTTP 响应状态
                     if hasattr(e, "response") and e.response is not None:
                         status_code = getattr(e.response, "status_code", None)
                         if status_code in (401, 403):
-                            # Auth failed: try next endpoint if available, else fail fast
-                            if target_url != fallback_urls[-1]:
-                                logger.warning(f"Endpoint {target_url} auth failed (HTTP {status_code}), switching to fallback...")
-                                break  # Exit retry loop, try next endpoint
-                            key_preview = self.api_key[:8] + "..." if self.api_key else "NOT_SET"
+                            if url_idx < len(endpoints) - 1:
+                                logger.warning(f"端点 {target_url} 鉴权失败 (HTTP {status_code})，正在切换至备用端点...")
+                                break
+                            key_preview = active_key[:8] + "..." if active_key else "NOT_SET"
                             logger.error(
-                                f"LLM API auth failed (HTTP {status_code})! Key prefix: {key_preview}. "
-                                f"Please check .env LLM_API_KEY or contact AI4SS Team to renew."
+                                f"LLM API 鉴权失败 (HTTP {status_code})！Key: {key_preview}. "
+                                f"格式: {self.api_format}. 请检查 .env LLM_API_KEY。"
                             )
                             raise RuntimeError(
-                                f"LLM API auth failed (HTTP {status_code}). Key: {key_preview}. "
-                                f"Check .env LLM_API_KEY or set LLM_FALLBACK_API_KEY for DeepSeek official API."
+                                f"LLM API 鉴权失败 (HTTP {status_code})。Key: {key_preview}。"
+                                f"请检查 .env LLM_API_KEY 或设置 LLM_FALLBACK_API_KEY。"
                             ) from e
                         elif status_code == 429:
                             is_rate_limit = True
@@ -256,45 +311,37 @@ class LLMClient:
                         logger.warning(f"LLM API 接入调用失败 ({target_url}) (尝试 {attempt}/{max_retries}): {str(e)}")
 
                     if attempt == max_retries:
-                        if target_url == fallback_urls[-1]:
+                        if url_idx == len(endpoints) - 1:
                             raise RuntimeError(f"All LLM API retry attempts failed ({max_retries} attempts). Last error: {e}") from e
                         else:
-                            logger.warning(f"端点 {target_url} 无法连接，正在自动切换至备用端点 {fallback_urls[-1]}...")
+                            logger.warning(f"端点 {target_url} 无法连接，正在自动切换至备用端点...")
                             break
 
-                    # 避让逻辑
                     sleep_time = wait_time if wait_time > 0 else (2 ** attempt) + random.uniform(0.5, 2.0)
                     if is_rate_limit and wait_time == 0:
                         sleep_time += 3.0
-                    
                     time.sleep(sleep_time)
 
         raise RuntimeError("All LLM API retry attempts failed")
 
     def extract_json_from_text(self, raw_output: str) -> Dict[str, Any]:
-        """
-        强力提取文本中的 JSON 部分，支持 markdown、object 和 array。
-        """
+        """强力提取文本中的 JSON 部分，支持 markdown、object 和 array。"""
         candidates = []
 
-        # 1. 优先提取 markdown 代码块
         code_block = re.search(r"```(?:json)?\s*(.*?)\s*```", raw_output, re.DOTALL)
         if code_block:
             candidates.append(code_block.group(1))
 
-        # 2. 匹配可能的对象 `{...}` 贪婪与非贪婪最大区间
         obj_start = raw_output.find("{")
         obj_end = raw_output.rfind("}")
         if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
             candidates.append(raw_output[obj_start:obj_end + 1])
 
-        # 3. 匹配可能的数组 `[...]` 最大区间
         arr_start = raw_output.find("[")
         arr_end = raw_output.rfind("]")
         if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
             candidates.append(raw_output[arr_start:arr_end + 1])
 
-        # 4. 尝试直接解析全文
         candidates.append(raw_output)
 
         for candidate in candidates:
@@ -314,9 +361,7 @@ class LLMClient:
         temperature: float = 0.1,
         max_retries: int = 5,
     ) -> Dict[str, Any]:
-        """
-        请求并强力解析 JSON 输出，内置 JSON 损坏自动重试修复机制。
-        """
+        """请求并强力解析 JSON 输出，内置 JSON 损坏自动重试修复机制。"""
         raw_output = self.call(
             prompt=prompt,
             system_prompt=system_prompt,
@@ -349,9 +394,7 @@ class LLMClient:
                 raise ValueError(f"大模型自我修复 JSON 失败: {e_repair}") from e_repair
 
     def get_cost_statistics(self) -> Dict[str, Any]:
-        """
-        获取当前的 API 调用次数、Token 消耗及预估费用。
-        """
+        """获取当前的 API 调用次数、Token 消耗及预估费用。"""
         pricing = self.MODEL_PRICING.get(self.model, {
             "input_per_1m_tokens": 0.14,
             "output_per_1m_tokens": 0.28,
@@ -373,13 +416,13 @@ class LLMClient:
         }
 
     def validate_connection(self) -> Dict[str, Any]:
-        """
-        Validate API connection and key validity at startup.
-        """
+        """启动时验证 API 连接与密钥有效性。返回诊断结果字典。"""
         result = {
             "api_key_configured": bool(self.api_key and self.api_key != "your_api_key_here"),
             "api_key_preview": (self.api_key[:8] + "...") if self.api_key else "NOT_SET",
             "base_url": self.base_url,
+            "request_url": self.url,
+            "api_format": self.api_format,
             "model": self.model,
             "timeout": self.timeout,
             "dns_patch_enabled": ENABLE_LLM_DNS_PATCH,
@@ -388,7 +431,7 @@ class LLMClient:
             "error": None
         }
         if not result["api_key_configured"]:
-            result["error"] = "LLM_API_KEY not configured"
+            result["error"] = "LLM_API_KEY 未配置"
             return result
         try:
             test_resp = self.call(
