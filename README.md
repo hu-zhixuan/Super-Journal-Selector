@@ -1,169 +1,101 @@
-# 📊 期刊选稿画像助手 (Journal Profile Assistant)
-> **成果撰写与投稿决策阶段的“学术品味诊断与策略改造器” —— 百篇大样本驱动的极致特殊指向性对标系统**
+# 期刊选稿画像助手 (Journal Profile Assistant)
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/QD8-png/journal-profile-assistant-skill)
-[![Python Version](https://img.shields.io/badge/Python-3.10%20%7C%203.11-green?logo=python)](https://www.python.org/)
-[![Sample Scaling](https://img.shields.io/badge/Sample_Scaling-100%2B_Papers_Concurrent-purple)](LICENSE)
-[![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+百篇大样本驱动的学术期刊选稿偏好画像、多期刊智能路由与 Desk Reject 秒拒预测系统。
 
----
+## 快速开始
 
-## 🌟 核心定位与痛点解决
+### 1. 安装依赖
 
-在学术论文完成撰写并准备投稿的“科研最后一公里”，现有的学术工具（如 Elsevier/Springer Journal Finder）大多仅停留在**外部特征检索**层面——只告诉你这本期刊的学科分类和关键词是否匹配，无法解决**“这本期刊审稿人和主编到底偏好什么写法、什么理论品味、什么实证数据门槛”**的深层次痛点。
-
-传统的通用 AI 选稿助手在面对这一痛点时，往往由于**采样量极小（如仅分析十几篇摘要）**，导致产出的画像流于“泛泛而谈”，缺乏对具体亚领域（Sub-field）的**特殊指向性（Targeted Specificity）**。
-
-本 Skill 旨在打造一个数据驱动的 **期刊选稿底层偏好画像与大样本聚类重构系统**：
-* **输入**：目标期刊英文全称或缩写（可选传入个人准备投稿的论文摘要/完整草稿 `.docx/.pdf`）。
-* **大样本处理（核心差异化壁垒）**：抓取 OpenAlex 近年 **100~200 篇高引/最新真实论文大样本**，多线程并发拉起 LLM 抽取底层科研特征（构念、工具、样本底线），利用纯代码计算量化分布矩阵，通过**大样本池多维度余弦聚类**精准定位 Top 3 最吻合标杆与 Top 5 推荐引用文献。
-* **输出**：生成一份包含“范式倾向、理论视角、数据底线、审稿雷区、标题/摘要手术级改写”的 Markdown 深度循证对标指南，内置归一化 Citation Validator，对未在真实抓取池验证的文献自动标记 `[⚠️ Unverified Reference]`。
-
----
-
-## 🏆 核心技术优势与竞争壁垒 (Core Advantages & Architectural Barriers)
-
-### 1. 🌟 5 大精准 LLM 协同接入点 (DeepSeek-v4-flash 黄金闭环)
-系统不依赖单一无脑 Prompt，而是在全流水线的 **5 个战略枢纽** 精准接入 `deepseek-v4-flash`：
-* **Layer ① 主题语义解析**：提取草稿核心检索构念，生成高指向性关键词去 OpenAlex 检索文献；
-* **Layer ② 8 维 JSON 结构化提取**：并发解析百篇发文大样本的范式、工具与样本底线（带 MD5 10 位指纹缓存防护）；
-* **Layer ④ 主编循证诊断大脑**：结合纯代码统计事实，生成无废话的 AE 诊断报告、Desk Reject 秒拒预警与段落解构；
-* **🧭 全网多期刊梯队智能路由**：自动比对候选期刊池，输出冲刺 (Reaching)、主投 (Target)、保底 (Safe) 三级投递阵列；
-* **💬 模拟审稿人在线答辩舱**：继承期刊偏好，对作者提出的修改与稳健性方案进行在线实时审稿对线。
-
-### 2. 🎯 3 大投稿攻防杀手锏 (切中科研投稿命脉)
-* **去哪投 (🧭 多期刊路由)**：从“单期刊诊断”升级为“全网多期刊梯队智能决策大盘”，给出匹配度与基准录用率估计；
-* **会不会死 (🚨 主编 Desk Reject 预警)**：对比 100+ 篇大样本范式与样本门槛，硬核列出提交后 48 小时内被主编秒拒的物理死穴；
-* **怎么写 (🔬 Top 1 标杆段落解构)**：提取最相似顶级标杆论文的引言与方法论写作骨架，一比一像素级图谱映射。
-
-### 3. 🛡️ 生产级工程质量与可信验证
-* **⚖️ Citation Validator 真实性强校验**：引用自动与真实抓取池比对，未验证文献标记 `[⚠️ Unverified Reference]`，彻底杜绝 AI 假文献；
-* **⚡ 0.019 秒 Mock 单元测试**：11 个自动化测试用例 100% 覆盖去重、算法打分与路由逻辑；
-* **💰 极致性价比**：17 次 API 调用，百篇大样本对标单次成本仅需 **0.02 元人民币**；
-* **🛡️ 稳定无抖动界面**：Workers=2 黄金并发 + 0.5s QPS 线程安全防护 + SSL Session 自动刷新重试机制，界面流畅 0 抖动。
-
----
-
-## 🏗️ 四层解耦流水线架构 (Pipeline Architecture)
-
-本系统采用彻底解耦的模块化工程设计，这比起将逻辑堆砌在单个文件中，更符合 **“高技术实现质量”** 与 **“模块可复用性”** 标准：
-
-```
-+--------------------------------------------------------------------------------+
-| [Layer 1: 大样本开放文献抓取层] fetch_papers.py                                  |
-|   调用 OpenAlex API 抓取近年百篇级真实优质论文，自动计算活跃权重剔除历史停刊条目      |
-+--------------------------------------------------------------------------------+
-                                       |
-                                       v
-+--------------------------------------------------------------------------------+
-| [Layer 2: 并发结构化特征提取层] extract_features.py                              |
-|   开启多线程池 (Workers=3, 2 QPS 限速保护) 并发调用 LLM，将摘要提炼为规范 JSON 实体 |
-+--------------------------------------------------------------------------------+
-                                       |
-                                       v
-+--------------------------------------------------------------------------------+
-| [Layer 3: 纯代码多维聚合与语义聚类层] aggregate.py                                |
-|   纯 Python 统计范式占比与中位数，并在百篇级大样本池中融合概念语义计算余弦对标 Top 3 标杆 |
-+--------------------------------------------------------------------------------+
-                                       |
-                                       v
-+--------------------------------------------------------------------------------+
-| [Layer 4: 0.18 低温战略画像与修稿大脑层] generate_profile.py                       |
-|   在大样本事实底图支撑下，以资深编委 Associate Editor 口吻生成无废话的手术级诊断报告   |
-+--------------------------------------------------------------------------------+
-```
-
----
-
-## 💎 为什么“扩大样本容量”带来降维级“特殊指向性”？
-
-| 传统小样本比对 (仅 15~30 篇) | 🚀 本系统：百篇大样本并发采样与聚类 (100~200+ 篇) |
-| :--- | :--- |
-| **容易脑补幻觉**：样本太少，遇到亚领域细分主题，LLM 只能靠常识编造审稿规律。 | **真正的数据收敛**：在大样本真实统计下，“定量实证占比 62.4%”、“常发生物/心理样本量区间”是不容置论的客观底图。 |
-| **粗粒度同类项**：抓出来的相似论文往往只符合“大领域相似”，参考价值受限。 | **像素级亚领域聚类**：当文献池达 100+ 时，纯 Python 余弦相似度能精准锁定探讨**相同构念、相同变量**的具体直接竞品文献！ |
-| **诊断飘在空中**：因为证据不够严丝合缝，给出的建议难以击中作者内心痛点。 | **极致特殊指向**：让 LLM 拿着大样本规律与和你高度重合的 Top 3 竞品文献向你开炮，直击初审死穴！ |
-
----
-
-## 📋 快速使用指南
-
-### 1. 依赖安装
 ```bash
 git clone https://github.com/QD8-png/-skill.git
-cd journal-profile-skill
+cd --skill  # 注意目录名是 -skill
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量 (`.env`)
-复制 `.env.example` 为 `.env` 并填入你的 API 配置：
-```ini
-LLM_API_KEY=your_key_here
-LLM_BASE_URL=your_base_url_here
-LLM_MODEL=your_model_name
-```
-*💡 注：系统已内置 Socket 级别 DNS 直连劫持补丁，会自动绕过本地代理软件 (如 NekoRay/Clash) 的 Fake-IP 捕获，保障中国大陆网络环境下的直连顺畅度与对话持续性。*
+### 2. 配置 API
 
-### 3. 一键启动 WebUI 界面（强烈推荐）
+复制 `.env.example` 为 `.env`，填入密钥：
+
+```ini
+LLM_API_KEY=你的密钥
+LLM_BASE_URL=https://fxb.supa.net.cn:6443
+LLM_MODEL=deepseek-v4-flash
+LLM_API_FORMAT=openai
+```
+
+### 3. 运行
+
+**方式一：WebUI（推荐）**
+
 ```bash
 python app.py
 ```
-启动后访问 `http://127.0.0.1:7860` 即可在可视化界面中完成：
-1. **智能别名与发文活跃度联想**：支持 `PRA`、`PRL`、`CHB` 等极高频缩写自动路由与 IF 预览。
-2. **大样本调节滑块**：支持自由滑动调整并发采样文献数（默认 100 篇，最高支持 200 篇）。
-3. **全文深度拖拽解析**：支持 Word (`.docx`) 与 PDF (`.pdf`) 完整文档直接对标，精准捕捉文末稳健性检验与样本量参数。
 
-### 4. 运行命令行 CLI 工具
+打开浏览器访问 `http://127.0.0.1:7860`
+
+或直接双击 `run.bat`（Windows）
+
+**方式二：命令行**
+
 ```bash
-# 模式A：生成目标期刊近期发文大样本偏好画像（采样 100 篇）
-python main.py --journal "Computers in Human Behavior" --years 3 --max-papers 100
+# 生成期刊画像报告
+python main.py -j "Computers in Human Behavior" -y 3 -m 100
 
-# 模式B：定制化对标修稿运行：传入个人论文草稿，生成个性化改写与实验防御指南
-python main.py --journal "Strategic Management Journal" --user-draft my_manuscript.docx --max-papers 100
+# 传入论文草稿进行对标诊断
+python main.py -j "Strategic Management Journal" -u my_paper.docx
 ```
 
-### 5. 运行自动化测试套件与评估
+**方式三：Python SDK**
+
+```python
+from main import run_journal_profile_skill
+
+result = run_journal_profile_skill(
+    journal="Computers in Human Behavior",
+    years=3,
+    max_papers=100,
+    user_draft_path="my_paper.docx"  # 可选
+)
+print(result["report_markdown"])
+```
+
+### 4. 运行测试
+
 ```bash
-# 运行单元测试套件 (Mock 全隔离，0.017 秒极速通过)
 python -m unittest discover -s tests
-
-# 运行推荐算法独立标注评估 (进行算法与随机基线对比)
-python evaluate_recommendations.py
 ```
 
----
+## 项目结构
 
-## 📊 真实产出样例报告节选（《Computers in Human Behavior》）
+```
+├── app.py                  # Gradio WebUI（3个Tab：画像诊断 / 多期刊路由 / 审稿人对话）
+├── main.py                 # CLI 入口 + 核心 Skill 函数
+├── llm_client.py           # LLM 客户端（OpenAI/Anthropic 双格式自适应）
+├── fetch_papers.py         # Layer1: OpenAlex 文献抓取（双通道+多路Fallback）
+├── extract_features.py     # Layer2: LLM 并发结构化特征提取（Pydantic Schema驱动）
+├── aggregate.py            # Layer3: 纯代码统计聚合 + 语义相似度对标
+├── generate_profile.py     # Layer4: LLM 循证诊断报告生成 + Citation Validator
+├── journal_router.py       # 多期刊智能路由（冲刺/主投/保底三级梯队）
+├── journal_partitions.json # 期刊分区数据库（JCR/中科院）
+├── evaluate_recommendations.py  # 推荐算法独立评估脚本
+├── tests/                  # 单元测试（7个Mock测试）
+├── examples/               # 示例报告
+├── .env.example            # 环境变量模板
+├── pyproject.toml          # 项目配置
+└── requirements.txt        # 依赖清单
+```
 
-以下为系统基于大样本池对真实学术顶刊 **《Computers in Human Behavior》 (CHB)** 运行产生的深度画像报告节选：
+## 核心功能
 
-### 1. 范式与方法论倾向量化解读
-在大样本（N=100）统计下，研究范式定量分布如下：
-| 研究方法分类 | 占比 | 均次被引期望 |
-| :--- | :--- | :--- |
-| **Quantitative_Empirical (定量实证/问卷/实验)** | **46.7%** | **103.4 次 (绝对支柱赛道)** |
-| **Theoretical_Review (理论综述/系统性文献综述)** | **33.3%** | **64.8 次** |
-| Mixed_Methods (混合研究) | 13.4% | 28.0 次 |
-| Computational_AI_Simulation (计算与AI仿真) | 6.7% | 12.0 次 |
+| 功能 | 说明 |
+|------|------|
+| 选稿画像诊断 | 抓取100+篇真实论文，量化分析期刊偏好、样本门槛、理论品味 |
+| 多期刊智能路由 | 自动评定冲刺/主投/保底三级投递梯队 |
+| Desk Reject 预警 | 硬核审计草稿是否触发期刊物理死穴 |
+| Top1 标杆解构 | 段落级逻辑链对比与像素级修改建议 |
+| Citation Validator | 自动检测 AI 幻觉引用并标注警告 |
+| 模拟审稿人对话 | 与 AE 角色在线答辩 |
 
-> **主编视角**：CHB 是一本极度偏向**定量实证**与**系统性综述**的顶刊。单纯的技术或算法建模（AI仿真）如果缺乏对“人类行为/心理机制”的直接解释，极难被接收。
+## License
 
-### 2. 样本量级与分析工具硬门槛
-* **有效样本量分布**：
-  * **最小值底线 (Min)**：`N = 312`（低于 300 样本的单次问卷极易在初审触发秒拒红线）
-  * **中位数水准 (Median)**：`N = 761`
-  * **安全期望线**：建议拥有 `800+` 的多时点追踪数据。
-* **高频统计工具链排位**：
-  `SEM-PLS (结构方程模型)` > `Hayes Process (中介调节检验)` > `Behavioral Experiment (随机分配行为实验)`。
-
-### 3. 手术级改稿建议（以《大学生使用生成式 AI 的影响因素分析》为例）
-* **❌ 原标题（学生气/表层描述）**：《大学生使用生成式 AI 的现状及影响因素分析》
-* **🎯 🔪 编委重构建议（顶刊学术张力与特殊指向）**：
-  *Unlocking the algorithmic black box: How self-determination deficits and algorithmic surveillance trigger college students' GenAI misuse behaviors*
-  *(解密算法黑箱：自我决定缺失与算法监控如何诱发高等教育中的生成式 AI 违规使用)*
-* **Abstract 改造方向**：
-  将平铺直叙的变量介绍，重构为 **“痛点驱动 -> 理论冲突 (SDT理论) -> 严谨实证对标 (对齐 Top 1 标杆文献的 N=761/SEM 范式) -> 反直觉发现 -> 理论边际贡献”** 的五步黄金逻辑链。
-
----
-
-## ⚖️ 开源协议
-本项目采用 [MIT License](LICENSE) 协议开源。欢迎交流、共建与复用本大样本选稿诊断流水线！
+MIT
