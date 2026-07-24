@@ -1,7 +1,7 @@
 """
 网络引导配置（必须在所有第三方库之前最先导入）。
 
-背景：国内网络直连 huggingface.co 常被阻断，sentence-transformers 首次
+背景：国内网络直连 huggingface.co 速度较慢，sentence-transformers 首次
 下载 all-MiniLM-L6-v2 模型时会出现无限重试（WinError 10060），
 导致流水线长时间卡死在"统计引擎计算余弦相似度"阶段。
 
@@ -26,9 +26,9 @@ try:
 except ImportError:
     pass
 
-# 强制清理系统代理环境变量，确保物理直连，
-# 防止本地 VPN/Clash 对镜像站造成 SSL 中间人干扰（EOF in violation of protocol）。
-# 与 llm_client.py 中的代理清理策略保持一致，此处上移以覆盖 HF 模型下载链路。
+# 清理代理环境变量，确保直连镜像站，
+# 防止本地代理工具对镜像站造成 SSL 连接异常（EOF in violation of protocol）。
+# 与 llm_client.py 中的清理策略保持一致，此处上移以覆盖 HF 模型下载链路。
 for _proxy_var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]:
     os.environ.pop(_proxy_var, None)
 os.environ["NO_PROXY"] = "*"
