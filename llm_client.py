@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-# 强制清理系统代理环境变量，确保 100% 物理网络直连，防止本地 VPN/Clash 干扰
+# 清理代理环境变量，确保网络直连，防止本地代理工具干扰
 for proxy_var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]:
     os.environ.pop(proxy_var, None)
 os.environ["NO_PROXY"] = "*"
 os.environ["no_proxy"] = "*"
 
-# ==================== Socket 层 DNS 劫持补丁 ====================
+# ==================== Socket 层 DNS 直连优化 ====================
 ENABLE_LLM_DNS_PATCH = os.getenv("ENABLE_LLM_DNS_PATCH", "true").lower() == "true"
 DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
 
@@ -69,7 +69,7 @@ def get_prompt_fingerprint(prompt_version: str, model_name: str, temperature: fl
 class LLMClient:
     """
     统一封装的 LLM 客户端，自动适配 OpenAI / Anthropic 两种 API 格式。
-    默认使用 OpenAI Chat Completions 格式（适配大多数中国 LLM 代理），
+    默认使用 OpenAI Chat Completions 格式（适配大多数 LLM 服务端），
     可通过 LLM_API_FORMAT=anthropic 切换为 Anthropic Messages 格式。
     """
 
@@ -228,7 +228,7 @@ class LLMClient:
         # 构建端点列表
         endpoints = []
         endpoints.append((self.url, self.api_key))
-        # 如果主端点是 fxb 代理，添加 DeepSeek 官方作为备用
+        # 如果主端点是 fxb 服务，添加 DeepSeek 官方作为备用
         if "fxb.supa.net.cn" in self.url:
             fallback_key = self.fallback_api_key or self.api_key
             if self.api_format == "anthropic":

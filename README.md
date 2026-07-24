@@ -7,8 +7,8 @@
 ### 1. 安装依赖
 
 ```bash
-git clone https://github.com/QD8-png/-skill.git
-cd --skill  # 注意目录名是 -skill
+git clone https://github.com/QD8-png/Super-Journal-Selector.git
+cd Super-Journal-Selector
 pip install -r requirements.txt
 ```
 
@@ -101,7 +101,7 @@ python -m unittest discover -s tests
 
 **Q: 进度卡在“正在启动统计引擎计算余弦相似度... 80%”不动？**
 
-原因：首次运行需下载 sentence-transformers 语义模型 `all-MiniLM-L6-v2`（约 90MB），国内直连 huggingface.co 被阻断后会无限重试。
+原因：首次运行需下载 sentence-transformers 语义模型 `all-MiniLM-L6-v2`（约 90MB），国内直连 huggingface.co 速度较慢时会反复重试。
 
 解决（三级保障，已内置 `network_config.py` 自动处理）：
 

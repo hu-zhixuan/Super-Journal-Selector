@@ -78,7 +78,7 @@ def deduplicate_papers(papers: List[PaperRecord]) -> List[PaperRecord]:
     return deduped
 
 
-# 显式禁用 requests 的系统代理（规避 VPN/企业代理对学术 API 的 SSL 中间人拦截）；
+# 显式禁用 requests 的系统代理（规避代理工具对学术 API 的 SSL 连接干扰）；
 # 标注为 Any 以兼容 requests 类型存根（其声明的 proxies 不接受 None 值）
 _NO_SYSTEM_PROXY: Any = {"http": None, "https": None}
 

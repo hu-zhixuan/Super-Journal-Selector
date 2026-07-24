@@ -31,6 +31,10 @@ dev = [
     "ruff>=0.4.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/QD8-png/Super-Journal-Selector"
+Issues = "https://github.com/QD8-png/Super-Journal-Selector/issues"
+
 [project.scripts]
 journal-profile = "main:main"
 
