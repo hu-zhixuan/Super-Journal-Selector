@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from app import parse_draft_input, JOURNAL_ALIASES
+
+from app import JOURNAL_ALIASES, parse_draft_input
 
 
 class TestAppFunctions(unittest.TestCase):
-
     def test_parse_draft_input_raw_text(self):
         text = "  This is my paper abstract.  "
         res = parse_draft_input(text, None)

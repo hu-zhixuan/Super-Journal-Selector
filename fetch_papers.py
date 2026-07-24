@@ -1,12 +1,13 @@
-import os
-import json
-import re
-import requests
-import logging
 import hashlib
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass, asdict
+import json
+import logging
+import os
+import re
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +89,11 @@ class OpenAlexFetcher:
     def __init__(self, email: Optional[str] = None):
         self.email = email or os.getenv("OPENALEX_EMAIL")
         if not self.email or self.email == "your_email@example.com":
-            logger.info("未在 .env 中检测到有效的 OPENALEX_EMAIL。建议配置真实邮箱以加入 OpenAlex Polite Pool，享受更高频的学术检索响应速度。")
+            logger.info(
+                "未在 .env 中检测到有效的 OPENALEX_EMAIL。建议配置真实邮箱以加入 OpenAlex Polite Pool，享受更高频的学术检索响应速度。"
+            )
             self.email = "researcher@example.com"
-        self.headers = {
-            "User-Agent": f"JournalProfileSkill/1.0 (mailto:{self.email})"
-        }
+        self.headers = {"User-Agent": f"JournalProfileSkill/1.0 (mailto:{self.email})"}
 
     def resolve_journal_source(self, journal_name: str) -> Optional[Dict[str, Any]]:
         """
@@ -119,14 +120,12 @@ class OpenAlexFetcher:
             for res in results:
                 display_name = res.get("display_name", "")
                 res_clean = clean_name(display_name)
-                
+
                 counts_by_year = res.get("counts_by_year", [])
                 recent_works_sum = sum(
-                    c.get("works_count", 0)
-                    for c in counts_by_year
-                    if c.get("year", 0) >= (current_year - 2)
+                    c.get("works_count", 0) for c in counts_by_year if c.get("year", 0) >= (current_year - 2)
                 )
-                
+
                 is_name_match = (target_clean in res_clean) or (res_clean in target_clean)
                 candidates.append((res, recent_works_sum, is_name_match))
 
@@ -134,12 +133,16 @@ class OpenAlexFetcher:
             if matched_candidates:
                 matched_candidates.sort(key=lambda x: x[1], reverse=True)
                 best_match = matched_candidates[0][0]
-                logger.info(f"匹配到活跃期刊: '{best_match.get('display_name')}' (ID: {best_match.get('id')}), 近3年发文: {matched_candidates[0][1]} 篇")
+                logger.info(
+                    f"匹配到活跃期刊: '{best_match.get('display_name')}' (ID: {best_match.get('id')}), 近3年发文: {matched_candidates[0][1]} 篇"
+                )
                 return best_match
 
             candidates.sort(key=lambda x: x[1], reverse=True)
             best_match = candidates[0][0]
-            logger.info(f"采用相似推荐最活跃期刊: '{best_match.get('display_name')}' (ID: {best_match.get('id')}), 近3年发文: {candidates[0][1]} 篇")
+            logger.info(
+                f"采用相似推荐最活跃期刊: '{best_match.get('display_name')}' (ID: {best_match.get('id')}), 近3年发文: {candidates[0][1]} 篇"
+            )
             return best_match
 
         except Exception as e:
@@ -161,7 +164,9 @@ class OpenAlexFetcher:
         return " ".join([item["word"] for item in word_list])
 
     @staticmethod
-    def _build_paper_from_openalex(item: Dict[str, Any], source_display_name: str, current_year: int) -> Optional[PaperRecord]:
+    def _build_paper_from_openalex(
+        item: Dict[str, Any], source_display_name: str, current_year: int
+    ) -> Optional[PaperRecord]:
         """从 OpenAlex 单条记录构建 PaperRecord，自动还原倒排摘要并过滤过短摘要。"""
         abstract_text = OpenAlexFetcher._reconstruct_abstract(item.get("abstract_inverted_index"))
         if len(abstract_text.split()) < 40:
@@ -218,35 +223,32 @@ class OpenAlexFetcher:
         x_concepts = source_info.get("x_concepts", [])
 
         # 3. 加载本地分区（防呆清洗）
-        local_partition = {
-            "jcr_zone": "未知",
-            "cas_zone": "未知",
-            "cas_sub_categories": "N/A",
-            "is_top": "未知"
-        }
+        local_partition = {"jcr_zone": "未知", "cas_zone": "未知", "cas_sub_categories": "N/A", "is_top": "未知"}
         try:
             partitions_path = os.path.join(os.path.dirname(__file__), "journal_partitions.json")
             if os.path.exists(partitions_path):
                 with open(partitions_path, "r", encoding="utf-8") as f:
                     raw_db = json.load(f)
-                
+
                 # 对加载的数据做首尾空格和大小写清洗
                 db = {}
                 for k, v in raw_db.items():
-                    db[k.strip().lower()] = {
-                        sub_k.strip().lower(): sub_v.strip()
-                        for sub_k, sub_v in v.items()
-                    }
+                    db[k.strip().lower()] = {sub_k.strip().lower(): sub_v.strip() for sub_k, sub_v in v.items()}
 
                 q_clean = journal_name.lower().strip()
                 match_found = False
                 for k, v in db.items():
-                    if (k in q_clean) or (q_clean in k) or (source_display_name.lower() in k) or (k in source_display_name.lower()):
+                    if (
+                        (k in q_clean)
+                        or (q_clean in k)
+                        or (source_display_name.lower() in k)
+                        or (k in source_display_name.lower())
+                    ):
                         local_partition = {
                             "jcr_zone": v.get("jcr_zone", "未知"),
                             "cas_zone": v.get("cas_zone", "未知"),
                             "cas_sub_categories": v.get("cas_sub_categories", "N/A"),
-                            "is_top": v.get("is_top", "未知")
+                            "is_top": v.get("is_top", "未知"),
                         }
                         match_found = True
                         break
@@ -267,7 +269,7 @@ class OpenAlexFetcher:
             "jcr_zone": local_partition.get("jcr_zone"),
             "cas_zone": local_partition.get("cas_zone"),
             "cas_sub_categories": local_partition.get("cas_sub_categories"),
-            "is_top": local_partition.get("is_top")
+            "is_top": local_partition.get("is_top"),
         }
 
         # 4. 双通道配比逻辑
@@ -283,7 +285,9 @@ class OpenAlexFetcher:
             # 默认配比：A 通道 60%，B 通道 40%
             target_b = int(max_papers * 0.40)
             target_a = max_papers - target_b
-            logger.info(f"开启双通道动态对标：通道 A (高引基准) 计划 {target_a} 篇，通道 B (主题匹配) 计划 {target_b} 篇。检索词: {search_query}")
+            logger.info(
+                f"开启双通道动态对标：通道 A (高引基准) 计划 {target_a} 篇，通道 B (主题匹配) 计划 {target_b} 篇。检索词: {search_query}"
+            )
 
         # ===== 通道 A：热门高引文献检索 =====
         if target_a > 0:
@@ -295,7 +299,9 @@ class OpenAlexFetcher:
                 "per-page": min(target_a * 2, 200),
             }
             try:
-                resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25)
+                resp = requests.get(
+                    url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                )
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
                 for item in results:
@@ -320,7 +326,9 @@ class OpenAlexFetcher:
                 "per-page": min(target_b * 2, 100),
             }
             try:
-                resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25)
+                resp = requests.get(
+                    url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                )
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
                 for item in results:
@@ -340,7 +348,9 @@ class OpenAlexFetcher:
                 if "search" in params:
                     del params["search"]
                 try:
-                    resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25)
+                    resp = requests.get(
+                        url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                    )
                     resp.raise_for_status()
                     results = resp.json().get("results", [])
                     b2_count = 0
@@ -350,7 +360,9 @@ class OpenAlexFetcher:
                             continue
                         papers_channel_b.append(paper)
                         b2_count += 1
-                    logger.info(f"路线 B2 (Title Search) 补齐了 {b2_count} 篇，累计 B 通道达到: {len(papers_channel_b)} 篇。")
+                    logger.info(
+                        f"路线 B2 (Title Search) 补齐了 {b2_count} 篇，累计 B 通道达到: {len(papers_channel_b)} 篇。"
+                    )
                 except Exception as e_b2:
                     logger.warning(f"路线 B2 检索异常: {e_b2}")
 
@@ -366,9 +378,11 @@ class OpenAlexFetcher:
                         "format": "json",
                         "pageSize": min(target_b * 2, 50),
                         "resultType": "core",
-                        "sort": "CITED desc"
+                        "sort": "CITED desc",
                     }
-                    resp_epmc = requests.get(epmc_url, params=epmc_params, proxies={"http": None, "https": None}, timeout=20)
+                    resp_epmc = requests.get(
+                        epmc_url, params=epmc_params, proxies={"http": None, "https": None}, timeout=20
+                    )
                     if resp_epmc.status_code == 200:
                         epmc_results = resp_epmc.json().get("resultList", {}).get("result", [])
                         b3_count = 0
@@ -386,11 +400,13 @@ class OpenAlexFetcher:
                                 publication_year=int(item.get("pubYear", current_year)),
                                 cited_by_count=item.get("citedByCount", 0),
                                 source_title=source_display_name,
-                                concepts=keywords
+                                concepts=keywords,
                             )
                             papers_channel_b.append(paper)
                             b3_count += 1
-                        logger.info(f"路线 B3 (Europe PMC) 补齐了 {b3_count} 篇，累计 B 通道达到: {len(papers_channel_b)} 篇。")
+                        logger.info(
+                            f"路线 B3 (Europe PMC) 补齐了 {b3_count} 篇，累计 B 通道达到: {len(papers_channel_b)} 篇。"
+                        )
                 except Exception as e_b3:
                     logger.warning(f"路线 B3 跨源检索异常: {e_b3}")
 
@@ -410,7 +426,9 @@ class OpenAlexFetcher:
         total_valid = len(deduped_papers)
         if total_valid < max_papers and len(deduped_a) < (max_papers - len(deduped_b)):
             # 如果去重后总量依然不够，且有检索接口完全失灵的情况，尝试降级做纯热门召回填补空缺
-            logger.warning(f"文献样本库总数 ({total_valid} 篇) 仍未达到计划的 {max_papers} 篇。触发全热门召回扩容填补...")
+            logger.warning(
+                f"文献样本库总数 ({total_valid} 篇) 仍未达到计划的 {max_papers} 篇。触发全热门召回扩容填补..."
+            )
             # 拉大分页抓取热门
             url = f"{self.BASE_URL}/works"
             filter_str = f"primary_location.source.id:{source_id},publication_year:>{min_year},has_abstract:true"
@@ -420,7 +438,9 @@ class OpenAlexFetcher:
                 "per-page": 200,
             }
             try:
-                resp = requests.get(url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25)
+                resp = requests.get(
+                    url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                )
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     for item in results:
@@ -441,10 +461,7 @@ class OpenAlexFetcher:
 
         # 5. 保存至本地 Caching 目录以供复用
         try:
-            cache_data = {
-                "papers": [p.to_dict() for p in final_papers],
-                "journal_metadata": journal_metadata
-            }
+            cache_data = {"papers": [p.to_dict() for p in final_papers], "journal_metadata": journal_metadata}
             with open(cache_file, "w", encoding="utf-8") as fc:
                 json.dump(cache_data, fc, ensure_ascii=False, indent=2)
             logger.info(f"💾 文献抓取成功落盘缓存：{cache_file}")

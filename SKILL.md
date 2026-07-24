@@ -54,7 +54,7 @@ result = run_journal_profile_skill(
     journal="Computers in Human Behavior",
     years=3,
     max_papers=100,
-    user_draft_path="my_paper.docx"  # 可选
+    user_draft_path="my_paper.docx",  # 可选
 )
 print(result["report_markdown"])
 ```

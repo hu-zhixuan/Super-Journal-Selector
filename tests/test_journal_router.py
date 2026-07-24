@@ -1,13 +1,13 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 from journal_router import JournalRouter
 
 
 class TestJournalRouter(unittest.TestCase):
-
     def test_journal_router_mock_output(self):
         router = JournalRouter()
-        
+
         mock_response = {
             "draft_summary_note": "A study on social media fatigue and psychological well-being using structural equation modeling.",
             "recommended_tiers": [
@@ -16,23 +16,23 @@ class TestJournalRouter(unittest.TestCase):
                     "journal_name": "MIS Quarterly",
                     "fit_score": 68,
                     "estimated_acceptance_rate": "15%-20%",
-                    "reason": "High reputation but requires multi-wave panel dataset."
+                    "reason": "High reputation but requires multi-wave panel dataset.",
                 },
                 {
                     "tier": "Target (主投)",
                     "journal_name": "Computers in Human Behavior",
                     "fit_score": 88,
                     "estimated_acceptance_rate": "25%-35%",
-                    "reason": "Perfect match for adolescent digital media fatigue topic."
+                    "reason": "Perfect match for adolescent digital media fatigue topic.",
                 },
                 {
                     "tier": "Safe (保底)",
                     "journal_name": "Computers in Human Behavior Reports",
                     "fit_score": 95,
                     "estimated_acceptance_rate": "45%-60%",
-                    "reason": "High acceptance rate with strong open science support."
-                }
-            ]
+                    "reason": "High acceptance rate with strong open science support.",
+                },
+            ],
         }
 
         with patch.object(router.llm, "call_json", return_value=mock_response):

@@ -1,6 +1,6 @@
 import json
 import random
-from typing import List, Dict, Any
+
 from aggregate import ProfileAggregator
 
 
@@ -22,7 +22,7 @@ def run_evaluation():
             "publication_year": 2024,
             "theoretical_frameworks": ["Self-Determination Theory", "SDT"],
             "analytical_tools": ["SEM", "SmartPLS"],
-            "concepts": ["social media fatigue", "wellbeing"]
+            "concepts": ["social media fatigue", "wellbeing"],
         },
         {
             "paper_id": "W102",
@@ -32,7 +32,7 @@ def run_evaluation():
             "publication_year": 2023,
             "theoretical_frameworks": ["Self-Determination Theory"],
             "analytical_tools": ["Regression", "SmartPLS"],
-            "concepts": ["parenting", "need satisfaction"]
+            "concepts": ["parenting", "need satisfaction"],
         },
         {
             "paper_id": "W103",
@@ -42,7 +42,7 @@ def run_evaluation():
             "publication_year": 2022,
             "theoretical_frameworks": ["Quantum Theory"],
             "analytical_tools": ["Simulation"],
-            "concepts": ["nanotechnology", "semiconductor"]
+            "concepts": ["nanotechnology", "semiconductor"],
         },
         {
             "paper_id": "W104",
@@ -52,7 +52,7 @@ def run_evaluation():
             "publication_year": 2024,
             "theoretical_frameworks": ["Self-Determination Theory"],
             "analytical_tools": ["Structural Equation Modeling"],
-            "concepts": ["motivation", "academic well-being"]
+            "concepts": ["motivation", "academic well-being"],
         },
         {
             "paper_id": "W105",
@@ -62,7 +62,7 @@ def run_evaluation():
             "publication_year": 2021,
             "theoretical_frameworks": ["Agency Theory"],
             "analytical_tools": ["Fixed Effects Regression"],
-            "concepts": ["ESG", "finance"]
+            "concepts": ["ESG", "finance"],
         },
         {
             "paper_id": "W106",
@@ -72,7 +72,7 @@ def run_evaluation():
             "publication_year": 2024,
             "theoretical_frameworks": ["Self-Determination Theory"],
             "analytical_tools": ["SEM"],
-            "concepts": ["screen time", "sleep"]
+            "concepts": ["screen time", "sleep"],
         },
         {
             "paper_id": "W107",
@@ -82,7 +82,7 @@ def run_evaluation():
             "publication_year": 2023,
             "theoretical_frameworks": ["Deep Learning"],
             "analytical_tools": ["BERT", "PyTorch"],
-            "concepts": ["NLP", "healthcare"]
+            "concepts": ["NLP", "healthcare"],
         },
         {
             "paper_id": "W108",
@@ -92,8 +92,8 @@ def run_evaluation():
             "publication_year": 2024,
             "theoretical_frameworks": ["Self-Determination Theory"],
             "analytical_tools": ["ANOVA"],
-            "concepts": ["digital detox", "wellbeing"]
-        }
+            "concepts": ["digital detox", "wellbeing"],
+        },
     ]
 
     # 2. 独立标注评估测试案例 (Ground Truth Cases)
@@ -101,18 +101,18 @@ def run_evaluation():
         {
             "case_name": "Case 1: Social Media Fatigue & SDT",
             "draft_text": "We model the mediating effect of need frustration and need satisfaction in social media fatigue using SEM.",
-            "ground_truth_references": ["W101", "W102", "W106"]
+            "ground_truth_references": ["W101", "W102", "W106"],
         },
         {
             "case_name": "Case 2: Adolescent Screen Time & Parenting",
             "draft_text": "Applying Self-Determination Theory to examine parenting control, screen time fatigue, and sleep disturbance.",
-            "ground_truth_references": ["W102", "W106", "W108"]
+            "ground_truth_references": ["W102", "W106", "W108"],
         },
         {
             "case_name": "Case 3: Hybrid Learning Motivation",
             "draft_text": "Examining student motivation and academic burnout in digital learning environments with SDT framework.",
-            "ground_truth_references": ["W104", "W102"]
-        }
+            "ground_truth_references": ["W104", "W102"],
+        },
     ]
 
     aggregator = ProfileAggregator()
@@ -138,7 +138,7 @@ def run_evaluation():
         # 运行我们的代码加权打分算法
         stats = aggregator.aggregate(paper_pool, user_draft_text=draft_text)
         recommended = stats.get("recommended_references", [])
-        
+
         formula_ids = []
         for rec in recommended:
             orig = next((p for p in paper_pool if p["title"] == rec["title"]), None)
@@ -169,36 +169,38 @@ def run_evaluation():
         random_top3_hits += r_top3
         random_top5_hits += r_top5
 
-        details.append({
-            "case_name": case["case_name"],
-            "ground_truth": gt_ids,
-            "formula_recommendations": formula_ids,
-            "random_recommendations": random_ids,
-            "formula_mrr": round(f_mrr, 3),
-            "random_mrr": round(r_mrr, 3)
-        })
+        details.append(
+            {
+                "case_name": case["case_name"],
+                "ground_truth": gt_ids,
+                "formula_recommendations": formula_ids,
+                "random_recommendations": random_ids,
+                "formula_mrr": round(f_mrr, 3),
+                "random_mrr": round(r_mrr, 3),
+            }
+        )
 
     num_cases = len(test_cases)
-    
+
     report = {
         "dataset_info": {
             "num_cases": num_cases,
             "annotation_method": "Independent Manual Ground Truth Annotation",
-            "evaluation_note": "Comparing Weighted Formula Strategy against Random Baseline"
+            "evaluation_note": "Comparing Weighted Formula Strategy against Random Baseline",
         },
         "metrics_summary": {
             "weighted_formula_strategy": {
                 "top3_hit_rate": round(formula_top3_hits / total_citations_count, 3),
                 "top5_hit_rate": round(formula_top5_hits / total_citations_count, 3),
-                "mean_reciprocal_rank_mrr": round(formula_mrr_sum / num_cases, 3)
+                "mean_reciprocal_rank_mrr": round(formula_mrr_sum / num_cases, 3),
             },
             "random_baseline_strategy": {
                 "top3_hit_rate": round(random_top3_hits / total_citations_count, 3),
                 "top5_hit_rate": round(random_top5_hits / total_citations_count, 3),
-                "mean_reciprocal_rank_mrr": round(random_mrr_sum / num_cases, 3)
-            }
+                "mean_reciprocal_rank_mrr": round(random_mrr_sum / num_cases, 3),
+            },
         },
-        "details": details
+        "details": details,
     }
 
     output_file = "evaluation_report.json"
@@ -209,8 +211,12 @@ def run_evaluation():
     random_res = report["metrics_summary"]["random_baseline_strategy"]
 
     print("--- Metric Comparisons ---")
-    print(f"Formula Strategy  => MRR: {formula_res['mean_reciprocal_rank_mrr']}, Top3 Hit: {formula_res['top3_hit_rate']*100:.1f}%, Top5 Hit: {formula_res['top5_hit_rate']*100:.1f}%")
-    print(f"Random Baseline   => MRR: {random_res['mean_reciprocal_rank_mrr']}, Top3 Hit: {random_res['top3_hit_rate']*100:.1f}%, Top5 Hit: {random_res['top5_hit_rate']*100:.1f}%")
+    print(
+        f"Formula Strategy  => MRR: {formula_res['mean_reciprocal_rank_mrr']}, Top3 Hit: {formula_res['top3_hit_rate'] * 100:.1f}%, Top5 Hit: {formula_res['top5_hit_rate'] * 100:.1f}%"
+    )
+    print(
+        f"Random Baseline   => MRR: {random_res['mean_reciprocal_rank_mrr']}, Top3 Hit: {random_res['top3_hit_rate'] * 100:.1f}%, Top5 Hit: {random_res['top5_hit_rate'] * 100:.1f}%"
+    )
     print(f"Evaluation exported to: {output_file}")
 
 

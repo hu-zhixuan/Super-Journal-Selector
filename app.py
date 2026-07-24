@@ -1,21 +1,21 @@
-import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
-import os
 import logging
-import requests
-import urllib3.util.connection as urllib3_cn
-import gradio as gr
-from dotenv import load_dotenv
+import os
 from datetime import datetime
-from typing import Any, Optional, Dict, List
+from typing import Any
 
 # 引入文档解析库
 import docx
+import gradio as gr
 import pypdf
+import requests
+from dotenv import load_dotenv
+
+import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
+from aggregate import ProfileAggregator
+from extract_features import FeatureExtractor
 
 # 导入流水线模块
 from fetch_papers import OpenAlexFetcher
-from extract_features import FeatureExtractor
-from aggregate import ProfileAggregator
 from generate_profile import ProfileGenerator
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # ==================== Socket 层 DNS 劫持补丁 ====================
-from llm_client import install_dns_patch
+from llm_client import install_dns_patch  # noqa: E402  # 须在 network_config 初始化后调用
+
 install_dns_patch()
 # ===============================================================
 
@@ -51,6 +52,7 @@ def parse_pdf(file_path: str) -> str:
     """
     try:
         import fitz  # PyMuPDF
+
         doc = fitz.open(file_path)
         text_list = []
         for page in doc:
@@ -148,10 +150,7 @@ def search_journals(query: str):
         url = "https://api.openalex.org/sources"
         try:
             resp = requests.get(
-                url, 
-                params={"search": term, "per-page": 6}, 
-                proxies={"http": None, "https": None}, 
-                timeout=5
+                url, params={"search": term, "per-page": 6}, proxies={"http": None, "https": None}, timeout=5
             )
             if resp.status_code == 200:
                 results = resp.json().get("results", [])
@@ -164,11 +163,9 @@ def search_journals(query: str):
                     display_name = item.get("display_name", "Unknown")
                     counts_by_year = item.get("counts_by_year", [])
                     recent_works = sum(
-                        c.get("works_count", 0) 
-                        for c in counts_by_year 
-                        if c.get("year", 0) >= (current_year - 2)
+                        c.get("works_count", 0) for c in counts_by_year if c.get("year", 0) >= (current_year - 2)
                     )
-                    
+
                     summary_stats = item.get("summary_stats", {})
                     if_est = summary_stats.get("2yr_mean_citedness", "N/A")
                     if isinstance(if_est, float):
@@ -181,7 +178,11 @@ def search_journals(query: str):
                     # 构造富信息展示标签
                     label = f"✨ {display_name} (近3年发文: {recent_works}篇 | 估算IF: {if_est})"
                     # 如果正好是缩写别名对标上的正牌，赋予最高加权
-                    score = recent_works * (3 if q_clean in JOURNAL_ALIASES and display_name.lower() == JOURNAL_ALIASES[q_clean].lower() else 1)
+                    score = recent_works * (
+                        3
+                        if q_clean in JOURNAL_ALIASES and display_name.lower() == JOURNAL_ALIASES[q_clean].lower()
+                        else 1
+                    )
                     candidates.append((score, label, display_name))
         except Exception as e:
             logger.warning(f"智能联想检索异常: {e}")
@@ -189,7 +190,7 @@ def search_journals(query: str):
     # 按活跃权重降序排列，确保活的、顶级的、匹配准的期刊排在第一项
     candidates.sort(key=lambda x: x[0], reverse=True)
     dropdown_choices = [(item[1], item[2]) for item in candidates[:6]]
-    
+
     if dropdown_choices:
         return gr.Dropdown(choices=dropdown_choices, value=dropdown_choices[0][1])
     return gr.Dropdown(choices=[], value=None)
@@ -210,7 +211,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         file_path = file_obj.name
         ext = os.path.splitext(file_path)[1].lower()
         yield f"⏳ 正在解析上传的 {ext} 完整学术文档，即将开始高精度对标与诊断...", ""
-        
+
         if ext == ".docx":
             final_draft_text = parse_docx(file_path)
         elif ext == ".pdf":
@@ -223,6 +224,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
 
     if final_draft_text:
         from aggregate import clean_and_truncate_draft
+
         final_draft_text = clean_and_truncate_draft(final_draft_text)
 
     # 提取草稿检索关键词，触发双通道主题匹配检索（与 CLI/SDK 入口对齐）
@@ -231,8 +233,9 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         try:
             progress(0.02, desc="正在提取草稿检索关键词以开启双通道主题匹配...")
             yield "⏳ [1/4] 正在从草稿中提取学术检索关键词，开启双通道动态对标检索...", ""
-            from main import extract_search_keywords
             from llm_client import LLMClient
+            from main import extract_search_keywords
+
             keywords = extract_search_keywords(LLMClient(), final_draft_text)
             if keywords:
                 search_query = " ".join(keywords)
@@ -258,30 +261,33 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         total_papers = len(papers)
         workers = FeatureExtractor._get_max_workers()
         progress(0.20, desc=f"[2/4] 正在拉起 {workers} 线程并发抽取 0/{total_papers}...")
-        yield f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。已开启多线程并发网络抽取 (Workers={workers})...", ""
-        
+        yield (
+            f"⏳ [2/4] 成功建立 {total_papers} 篇大样本有效论文池。已开启多线程并发网络抽取 (Workers={workers})...",
+            "",
+        )
+
         extractor = FeatureExtractor()
         extracted_features = []
-        
+
         for completed, total, p_item, current_results in extractor.extract_batch_iter(papers):
             extracted_features = current_results
             sub_pct = completed / total
             overall_pct = 0.20 + 0.55 * sub_pct
             title_preview = (p_item.title[:25] + "...") if len(p_item.title) > 25 else p_item.title
-            
+
             # 保持顶部原生进度条描述长度固定，防止页面高度跳动抖动
-            progress(overall_pct, desc=f"[2/4] 抽取特征 ({completed}/{total}) - {int(sub_pct*100)}%")
-            
+            progress(overall_pct, desc=f"[2/4] 抽取特征 ({completed}/{total}) - {int(sub_pct * 100)}%")
+
             # 动态渲染控制台文本 ASCII 进度条
             filled_len = int(completed * 20 // total)
             bar_str = "█" * filled_len + "░" * (20 - filled_len)
             yield (
-                f"⏳ [2/4] 正在并发抽取特征 ({completed}/{total} 篇 - {int(sub_pct*100)}%)\n"
+                f"⏳ [2/4] 正在并发抽取特征 ({completed}/{total} 篇 - {int(sub_pct * 100)}%)\n"
                 f"进度: [{bar_str}]\n"
                 f"最新完成: 《{title_preview}》",
-                ""
+                "",
             )
-                
+
         if not extracted_features:
             yield "❌ 错误：大模型未成功从摘要中抽取出任何结构化特征！请检查接口连接。", ""
             return
@@ -298,12 +304,12 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         progress(0.90, desc="[4/4] 正在根据大样本事实底图撰写对标报告与发表概率预测...")
         yield "⏳ [4/4] 统计聚合完毕。正在调用大模型撰写深度学术画像与对标修改策略书...", ""
         generator = ProfileGenerator()
-        
+
         report_markdown = generator.generate_report(
             journal_name=journal_name,
             aggregated_stats=aggregated_stats,
             journal_metadata=journal_metadata,
-            user_draft_text=draft_text
+            user_draft_text=draft_text,
         )
 
         progress(1.0, desc="[4/4] 画像报告与发表概率预测生成成功！")
@@ -346,6 +352,7 @@ def chat_with_reviewer(message: str, history: list, report_text: str):
         return history, ""
 
     from llm_client import LLMClient
+
     llm = LLMClient()
 
     system_prompt = (
@@ -411,17 +418,18 @@ def run_journal_router(router_draft_text: str, router_file_obj: Any, main_draft_
         return "❌ 错误：未检测到任何草稿内容！请在上方粘贴草稿/上传 Word 或 PDF 文件，或者在主大厅【📊 选稿画像与循证诊断】中上传草稿！"
 
     from journal_router import JournalRouter
+
     router = JournalRouter()
     res = router.route_journals(final_text)
-    
+
     note = res.get("draft_summary_note", "论文摘要解析完成")
     tiers = res.get("recommended_tiers", [])
-    
+
     md_lines = [
-        f"### 🧭 全网学术期刊投递梯队路由诊断大盘",
+        "### 🧭 全网学术期刊投递梯队路由诊断大盘",
         f"> **稿件定位摘要**：{note}\n",
-        f"| 投递梯队 | 推荐期刊名称 | 综合契合度得分 | 预估基准录用率 | 决策路由理由 |",
-        f"| :--- | :--- | :--- | :--- | :--- |"
+        "| 投递梯队 | 推荐期刊名称 | 综合契合度得分 | 预估基准录用率 | 决策路由理由 |",
+        "| :--- | :--- | :--- | :--- | :--- |",
     ]
     for item in tiers:
         tier = item.get("tier", "")
@@ -430,7 +438,7 @@ def run_journal_router(router_draft_text: str, router_file_obj: Any, main_draft_
         rate = item.get("estimated_acceptance_rate", "")
         reason = item.get("reason", "")
         md_lines.append(f"| **{tier}** | `{name}` | **{score} 分** | `{rate}` | {reason} |")
-        
+
     return "\n".join(md_lines)
 
 
@@ -448,20 +456,20 @@ custom_css = """
     --body-text-color-subdued: #64748b !important;
     --color-accent: #4f46e5 !important;
     --color-accent-soft: #eef2ff !important;
-    
+
     /* Input Variables Fix */
     --input-background-fill: #ffffff !important;
     --input-background-fill-focus: #ffffff !important;
     --input-border-color: #cbd5e1 !important;
     --input-border-color-focus: #6366f1 !important;
     --input-text-color: #0f172a !important;
-    
+
     /* Label & Badge Variables Fix */
     --block-label-background-fill: #eef2ff !important;
     --block-label-text-color: #4338ca !important;
     --block-label-border-color: #c7d2fe !important;
     --block-title-text-color: #1e293b !important;
-    
+
     /* Neutral Palette Force Light */
     --neutral-50: #f8fafc !important;
     --neutral-100: #f1f5f9 !important;
@@ -474,7 +482,7 @@ custom_css = """
     --neutral-800: #1e293b !important;
     --neutral-900: #0f172a !important;
     --neutral-950: #020617 !important;
-    
+
     color-scheme: light !important;
 }
 
@@ -732,47 +740,40 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=a
                 # 左侧输入控制区
                 with gr.Column(scale=2, min_width=380):
                     gr.Markdown("### 投稿对标参数配置")
-                    
+
                     search_input = gr.Textbox(
                         label="输入期刊关键词进行联想（输入 2 个字母以上自动检索）",
                         placeholder="例如: computers 或 strategic",
-                        value=""
+                        value="",
                     )
-                    
+
                     journal_input = gr.Dropdown(
                         label="选择目标期刊全称",
                         choices=["Computers in Human Behavior"],
                         value="Computers in Human Behavior",
                         allow_custom_value=True,
-                        interactive=True
+                        interactive=True,
                     )
-                    
+
                     with gr.Row():
-                        years_input = gr.Slider(
-                            minimum=1, maximum=5, value=3, step=1,
-                            label="数据回溯年份"
-                        )
+                        years_input = gr.Slider(minimum=1, maximum=5, value=3, step=1, label="数据回溯年份")
                         max_papers_input = gr.Slider(
-                            minimum=20, maximum=200, value=100, step=10,
-                            label="大样本并发采样文献数 (100+高特异性指向)"
+                            minimum=20, maximum=200, value=100, step=10, label="大样本并发采样文献数 (100+高特异性指向)"
                         )
-                        
+
                     # 输入方式卡片：提供粘贴文本和文件上传两种选择
                     with gr.Tab("粘贴摘要/草稿"):
                         draft_input = gr.Textbox(
                             label="粘贴拟投稿论文的 Title / Abstract / 大纲",
                             placeholder="在此粘贴，系统将给出手术级重构方案...",
-                            lines=8
+                            lines=8,
                         )
-                        
+
                     with gr.Tab("上传草稿文件"):
-                        file_input = gr.File(
-                            label="上传 Word (.docx) 或 PDF (.pdf) 文件",
-                            file_types=[".docx", ".pdf"]
-                        )
-                    
+                        file_input = gr.File(label="上传 Word (.docx) 或 PDF (.pdf) 文件", file_types=[".docx", ".pdf"])
+
                     submit_btn = gr.Button("一键生成期刊选稿画像与对标报告", variant="primary", size="lg")
-                    
+
                 # 右侧报告输出区
                 with gr.Column(scale=3, min_width=480):
                     gr.Markdown("### 期刊选稿画像与修稿报告")
@@ -780,27 +781,26 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=a
                         label="运行状态",
                         value="就绪，等待输入并点击生成...",
                         interactive=False,
-                        elem_classes=["status-box"]
+                        elem_classes=["status-box"],
                     )
-                    report_output = gr.Markdown(
-                        value="*报告生成后将在此处以精美 Markdown 格式自动渲染展示。*"
-                    )
+                    report_output = gr.Markdown(value="*报告生成后将在此处以精美 Markdown 格式自动渲染展示。*")
 
         with gr.Tab("多期刊梯队智能路由"):
             gr.Markdown("### 论文草稿多期刊投递阵列路由")
-            gr.Markdown("系统将自动解析你的论文草稿（支持粘贴文本、上传 Word/PDF 文件，并共享主大厅的草稿与文件），对比候选期刊池评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。")
-            
+            gr.Markdown(
+                "系统将自动解析你的论文草稿（支持粘贴文本、上传 Word/PDF 文件，并共享主大厅的草稿与文件），对比候选期刊池评定 **冲刺 (Reaching)**、**主投 (Target)** 与 **保底 (Safe)** 三级投递梯队。"
+            )
+
             with gr.Tabs():
                 with gr.Tab("粘贴摘要/草稿"):
                     router_draft_input = gr.Textbox(
                         label="粘贴你的论文草稿 (Title / Abstract / 全文)",
                         lines=6,
-                        placeholder="在此粘贴论文草稿（若在主大厅已粘贴或上传文件，此处可留空，系统自动复用）..."
+                        placeholder="在此粘贴论文草稿（若在主大厅已粘贴或上传文件，此处可留空，系统自动复用）...",
                     )
                 with gr.Tab("上传草稿文件"):
                     router_file_input = gr.File(
-                        label="上传 Word (.docx) 或 PDF (.pdf) 文件",
-                        file_types=[".docx", ".pdf"]
+                        label="上传 Word (.docx) 或 PDF (.pdf) 文件", file_types=[".docx", ".pdf"]
                     )
 
             router_btn = gr.Button("一键路由生成多期刊投递阵列", variant="primary", size="lg")
@@ -818,44 +818,32 @@ with gr.Blocks(title="期刊选稿画像助手 - WebUI", css=custom_css, theme=a
             msg_input = gr.Textbox(
                 label="输入你的疑问或辩词",
                 placeholder="例如: 关于第2点样本量劣势，如果我补充二期追踪数据达到 N=750，可以吗？",
-                lines=2
+                lines=2,
             )
             with gr.Row():
                 send_btn = gr.Button("发送", variant="primary")
                 clear_btn = gr.Button("清除历史对话")
 
     # 事件流绑定：输入关键词时，实时触发下拉框备选项更新
-    search_input.input(
-        fn=search_journals,
-        inputs=search_input,
-        outputs=journal_input
-    )
+    search_input.input(fn=search_journals, inputs=search_input, outputs=journal_input)
 
     # 按钮点击事件绑定 (将 file_input 接入输入列表，并更新状态)
     submit_btn.click(
         fn=run_pipeline,
         inputs=[journal_input, years_input, max_papers_input, draft_input, file_input],
-        outputs=[status_output, report_output]
+        outputs=[status_output, report_output],
     )
 
     # 路由大脑点击事件绑定 (全量接入本 Tab 输入与主大厅输入)
     router_btn.click(
         fn=run_journal_router,
         inputs=[router_draft_input, router_file_input, draft_input, file_input],
-        outputs=router_output
+        outputs=router_output,
     )
 
     # 聊天消息发送绑定 (直接绑定 report_output 作为 report_text 输入，解决 gr.State 缓存问题)
-    send_btn.click(
-        fn=chat_with_reviewer,
-        inputs=[msg_input, chatbot, report_output],
-        outputs=[chatbot, msg_input]
-    )
-    msg_input.submit(
-        fn=chat_with_reviewer,
-        inputs=[msg_input, chatbot, report_output],
-        outputs=[chatbot, msg_input]
-    )
+    send_btn.click(fn=chat_with_reviewer, inputs=[msg_input, chatbot, report_output], outputs=[chatbot, msg_input])
+    msg_input.submit(fn=chat_with_reviewer, inputs=[msg_input, chatbot, report_output], outputs=[chatbot, msg_input])
 
     # 清空对话
     clear_btn.click(fn=lambda: ([], ""), inputs=None, outputs=[chatbot, msg_input])

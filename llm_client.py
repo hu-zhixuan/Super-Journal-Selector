@@ -1,13 +1,14 @@
-import os
 import json
+import logging
+import os
+import random
 import re
 import time
-import random
-import logging
+from typing import Any, Dict, Optional
+
 import requests
 import urllib3
 import urllib3.util.connection as urllib3_cn
-from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ os.environ["no_proxy"] = "*"
 ENABLE_LLM_DNS_PATCH = os.getenv("ENABLE_LLM_DNS_PATCH", "true").lower() == "true"
 DEFAULT_DIRECT_IP = os.getenv("LLM_DIRECT_IP", "114.80.15.146")
 
+
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
     if host == "fxb.supa.net.cn" and DEFAULT_DIRECT_IP:
@@ -32,6 +34,7 @@ def patched_create_connection(address, *args, **kwargs):
         except Exception:
             pass
     return urllib3_cn._orig_create_connection(address, *args, **kwargs)
+
 
 def install_dns_patch():
     if ENABLE_LLM_DNS_PATCH:
@@ -42,20 +45,24 @@ def install_dns_patch():
     else:
         logger.info("Socket DNS 直连补丁处于关闭状态（按需开启）")
 
+
 install_dns_patch()
 # ===============================================================
 
 
 # ==================== Prompt 与算法版本控制 ====================
-import hashlib
+import hashlib  # noqa: E402  # 分组注释块后的模块导入
 
 EXTRACTION_PROMPT_VERSION = "v1.3"
 REPORT_PROMPT_VERSION = "v2.0"
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
+
 def get_prompt_fingerprint(prompt_version: str, model_name: str, temperature: float, system_prompt: str) -> str:
     raw_str = f"{prompt_version}:{model_name}:{temperature}:{system_prompt}"
     return hashlib.md5(raw_str.encode("utf-8")).hexdigest()[:10]
+
+
 # ===============================================================
 
 
@@ -72,7 +79,7 @@ class LLMClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         timeout: Optional[int] = None,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
     ):
         self.api_key = api_key or os.getenv("LLM_API_KEY")
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://fxb.supa.net.cn:6443")
@@ -140,7 +147,7 @@ class LLMClient:
                     pass
                 elif "/v1/" in url:
                     # 去掉旧的 /v1/xxx，替换为 /v1/chat/completions
-                    url = url[:url.index("/v1/")] + "/v1/chat/completions"
+                    url = url[: url.index("/v1/")] + "/v1/chat/completions"
                 else:
                     url = url + "/v1/chat/completions"
         return url
@@ -153,18 +160,13 @@ class LLMClient:
     def _build_headers(self, api_key: str) -> Dict[str, str]:
         """根据 API 格式构建请求头"""
         if self.api_format == "anthropic":
-            return {
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            }
+            return {"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
         else:
-            return {
-                "Authorization": f"Bearer {api_key}",
-                "content-type": "application/json"
-            }
+            return {"Authorization": f"Bearer {api_key}", "content-type": "application/json"}
 
-    def _build_payload(self, prompt: str, system_prompt: str, temperature: float, max_tokens: Optional[int] = None) -> Dict[str, Any]:
+    def _build_payload(
+        self, prompt: str, system_prompt: str, temperature: float, max_tokens: Optional[int] = None
+    ) -> Dict[str, Any]:
         """根据 API 格式构建请求体"""
         mt = max_tokens or self.max_tokens
         if self.api_format == "anthropic":
@@ -173,17 +175,14 @@ class LLMClient:
                 "max_tokens": mt,
                 "temperature": temperature,
                 "system": system_prompt,
-                "messages": [{"role": "user", "content": prompt}]
+                "messages": [{"role": "user", "content": prompt}],
             }
         else:
             return {
                 "model": self.model,
                 "max_tokens": mt,
                 "temperature": temperature,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ]
+                "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
             }
 
     def _parse_response(self, resp_data: Dict[str, Any]) -> str:
@@ -246,11 +245,7 @@ class LLMClient:
             for attempt in range(1, max_retries + 1):
                 try:
                     response = self.session.post(
-                        target_url,
-                        headers=headers,
-                        json=payload,
-                        timeout=effective_timeout,
-                        verify=False
+                        target_url, headers=headers, json=payload, timeout=effective_timeout, verify=False
                     )
                     response.raise_for_status()
 
@@ -272,10 +267,12 @@ class LLMClient:
                         self.total_completion_tokens += c_tokens
                     else:
                         self.token_source = "estimated"
+
                         def estimate_tokens(t: str) -> int:
-                            cjk_chars = len(re.findall(r'[\u4e00-\u9fff]', t))
-                            words = len(re.findall(r'\b[a-zA-Z0-9]+\b', t))
+                            cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", t))
+                            words = len(re.findall(r"\b[a-zA-Z0-9]+\b", t))
                             return int(cjk_chars * 1.5 + words * 1.3 + 1)
+
                         self.total_prompt_tokens += estimate_tokens(prompt) + estimate_tokens(system_prompt)
                         self.total_completion_tokens += estimate_tokens(text)
 
@@ -293,7 +290,9 @@ class LLMClient:
                         status_code = getattr(e.response, "status_code", None)
                         if status_code in (401, 403):
                             if url_idx < len(endpoints) - 1:
-                                logger.warning(f"端点 {target_url} 鉴权失败 (HTTP {status_code})，正在切换至备用端点...")
+                                logger.warning(
+                                    f"端点 {target_url} 鉴权失败 (HTTP {status_code})，正在切换至备用端点..."
+                                )
                                 break
                             key_preview = active_key[:8] + "..." if active_key else "NOT_SET"
                             logger.error(
@@ -314,18 +313,22 @@ class LLMClient:
                                     pass
 
                     if is_rate_limit:
-                        logger.warning(f"触发 API 频率限制 (HTTP 429) (尝试 {attempt}/{max_retries})，正在执行退避重试...")
+                        logger.warning(
+                            f"触发 API 频率限制 (HTTP 429) (尝试 {attempt}/{max_retries})，正在执行退避重试..."
+                        )
                     else:
                         logger.warning(f"LLM API 接入调用失败 ({target_url}) (尝试 {attempt}/{max_retries}): {str(e)}")
 
                     if attempt == max_retries:
                         if url_idx == len(endpoints) - 1:
-                            raise RuntimeError(f"All LLM API retry attempts failed ({max_retries} attempts). Last error: {e}") from e
+                            raise RuntimeError(
+                                f"All LLM API retry attempts failed ({max_retries} attempts). Last error: {e}"
+                            ) from e
                         else:
                             logger.warning(f"端点 {target_url} 无法连接，正在自动切换至备用端点...")
                             break
 
-                    sleep_time = wait_time if wait_time > 0 else (2 ** attempt) + random.uniform(0.5, 2.0)
+                    sleep_time = wait_time if wait_time > 0 else (2**attempt) + random.uniform(0.5, 2.0)
                     if is_rate_limit and wait_time == 0:
                         sleep_time += 3.0
                     time.sleep(sleep_time)
@@ -346,12 +349,12 @@ class LLMClient:
         obj_start = raw_output.find("{")
         obj_end = raw_output.rfind("}")
         if obj_start != -1 and obj_end != -1 and obj_end > obj_start:
-            candidates.append(raw_output[obj_start:obj_end + 1])
+            candidates.append(raw_output[obj_start : obj_end + 1])
 
         arr_start = raw_output.find("[")
         arr_end = raw_output.rfind("]")
         if arr_start != -1 and arr_end != -1 and arr_end > arr_start:
-            candidates.append(raw_output[arr_start:arr_end + 1])
+            candidates.append(raw_output[arr_start : arr_end + 1])
 
         candidates.append(raw_output)
 
@@ -409,16 +412,19 @@ class LLMClient:
 
     def get_cost_statistics(self) -> Dict[str, Any]:
         """获取当前的 API 调用次数、Token 消耗及预估费用。"""
-        pricing = self.MODEL_PRICING.get(self.model, {
-            "input_per_1m_tokens": 0.14,
-            "output_per_1m_tokens": 0.28,
-        })
+        pricing = self.MODEL_PRICING.get(
+            self.model,
+            {
+                "input_per_1m_tokens": 0.14,
+                "output_per_1m_tokens": 0.28,
+            },
+        )
         in_rate = pricing.get("input_per_1m_tokens", 0.14)
         out_rate = pricing.get("output_per_1m_tokens", 0.28)
         cost_usd = round(
-            (self.total_prompt_tokens / 1_000_000.0) * in_rate +
-            (self.total_completion_tokens / 1_000_000.0) * out_rate,
-            6
+            (self.total_prompt_tokens / 1_000_000.0) * in_rate
+            + (self.total_completion_tokens / 1_000_000.0) * out_rate,
+            6,
         )
         return {
             "total_api_calls": self.total_api_calls,
@@ -426,7 +432,7 @@ class LLMClient:
             "total_completion_tokens": self.total_completion_tokens,
             "token_source": self.token_source,
             "estimated_cost_usd": cost_usd,
-            "estimated_cost_cny": round(cost_usd * 7.2, 5) if cost_usd is not None else None
+            "estimated_cost_cny": round(cost_usd * 7.2, 5) if cost_usd is not None else None,
         }
 
     def validate_connection(self) -> Dict[str, Any]:
@@ -442,17 +448,17 @@ class LLMClient:
             "dns_patch_enabled": ENABLE_LLM_DNS_PATCH,
             "fallback_configured": bool(self.fallback_api_key),
             "connection_ok": False,
-            "error": None
+            "error": None,
         }
         if not result["api_key_configured"]:
             result["error"] = "LLM_API_KEY 未配置"
             return result
         try:
-            test_resp = self.call(
+            self.call(
                 prompt="Reply with exactly: OK",
                 system_prompt="Connection test. Reply: OK",
                 temperature=0.0,
-                max_retries=1
+                max_retries=1,
             )
             result["connection_ok"] = True
         except RuntimeError as e:

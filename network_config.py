@@ -15,11 +15,13 @@
                     缓存缺失时快速失败并自动降级为 BoW 词频相似度，
                     不再产生任何网络重试等待。
 """
+
 import os
 
 # 先加载 .env，使用户自定义的 HF_ENDPOINT / HF_HUB_OFFLINE 优先生效
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -27,8 +29,7 @@ except ImportError:
 # 强制清理系统代理环境变量，确保物理直连，
 # 防止本地 VPN/Clash 对镜像站造成 SSL 中间人干扰（EOF in violation of protocol）。
 # 与 llm_client.py 中的代理清理策略保持一致，此处上移以覆盖 HF 模型下载链路。
-for _proxy_var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-                   "http_proxy", "https_proxy", "all_proxy"]:
+for _proxy_var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]:
     os.environ.pop(_proxy_var, None)
 os.environ["NO_PROXY"] = "*"
 os.environ["no_proxy"] = "*"
@@ -52,8 +53,13 @@ def resolve_embedding_model_path(model_name: str = "all-MiniLM-L6-v2") -> str:
         return custom_path
 
     modelscope_cache = os.path.join(
-        os.path.expanduser("~"), ".cache", "modelscope", "models",
-        f"sentence-transformers--{model_name}", "snapshots", "master",
+        os.path.expanduser("~"),
+        ".cache",
+        "modelscope",
+        "models",
+        f"sentence-transformers--{model_name}",
+        "snapshots",
+        "master",
     )
     if os.path.isfile(os.path.join(modelscope_cache, "modules.json")):
         return modelscope_cache

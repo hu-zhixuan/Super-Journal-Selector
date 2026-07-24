@@ -1,8 +1,8 @@
-import os
 import json
 import logging
 import re
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
 from llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -183,13 +183,9 @@ class ProfileGenerator:
             # 长报告生成：输入为百篇聚合数据+长模板，输出数千 tokens，
             # 单独放宽至 300s / 8000 tokens，避免默认 60s 超时反复失败
             report_content = self.llm.call(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=0.18,
-                timeout=300,
-                max_tokens=8000
+                prompt=prompt, system_prompt=system_prompt, temperature=0.18, timeout=300, max_tokens=8000
             )
-            
+
             # 自动清洗掉 AI 常见的寒暄套话前缀 (如 "好的，作者。作为...编委...")
             if "# " in report_content:
                 first_header_idx = report_content.find("# ")
@@ -198,10 +194,7 @@ class ProfileGenerator:
 
             # 运行 Citation Validator 引用校验器进行审查 (过滤目标期刊名称本身)
             validated_report = self.validate_citations(
-                report_content,
-                aggregated_stats,
-                journal_name=journal_name,
-                journal_metadata=journal_metadata
+                report_content, aggregated_stats, journal_name=journal_name, journal_metadata=journal_metadata
             )
             logger.info("对标诊断报告生成并完成引用校验。")
             return validated_report
@@ -214,7 +207,7 @@ class ProfileGenerator:
         report_markdown: str,
         aggregated_stats: Dict[str, Any],
         journal_name: Optional[str] = None,
-        journal_metadata: Optional[Dict[str, Any]] = None
+        journal_metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Citation Validator (引用校验器)：
@@ -222,18 +215,18 @@ class ProfileGenerator:
         若发现数据库中不存在该论文，则自动追加警告标签，拒绝盲目硬替换。
         """
         valid_titles = set()
-        
+
         # 排除目标期刊名称本身的误报
         if journal_name:
             valid_titles.add(journal_name)
         if journal_metadata and "display_name" in journal_metadata:
             valid_titles.add(journal_metadata["display_name"])
-        
+
         # 收集所有真实存在的论文标题作为校验白名单
         all_raw_papers = (
-            aggregated_stats.get("most_similar_papers", []) +
-            aggregated_stats.get("recommended_references", []) +
-            aggregated_stats.get("representative_novelties", [])
+            aggregated_stats.get("most_similar_papers", [])
+            + aggregated_stats.get("recommended_references", [])
+            + aggregated_stats.get("representative_novelties", [])
         )
         for p in all_raw_papers:
             if "title" in p:
@@ -246,7 +239,7 @@ class ProfileGenerator:
 
         # 匹配 markdown 中所有被《书名号》包裹的内容
         found_titles = re.findall(r"《(.*?)》", report_markdown)
-        
+
         replaced_markdown = report_markdown
         for ft in set(found_titles):
             ft_norm = normalize_title(ft)
@@ -263,9 +256,6 @@ class ProfileGenerator:
             if not matched:
                 logger.warning(f"⚠️ 校验器检测到未验证引用：《{ft}》")
                 # 在书名号后插入显式警告符号，避免直接硬替换导致学术指代偏离
-                replaced_markdown = replaced_markdown.replace(
-                    f"《{ft}》",
-                    f"《{ft}》`[⚠️ Unverified Reference]`"
-                )
-                
+                replaced_markdown = replaced_markdown.replace(f"《{ft}》", f"《{ft}》`[⚠️ Unverified Reference]`")
+
         return replaced_markdown

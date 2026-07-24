@@ -1,14 +1,14 @@
 import unittest
+
 from aggregate import ProfileAggregator
 
 
 class TestAggregate(unittest.TestCase):
-
     def test_cosine_similarity(self):
         # 简单相似度验证（包含停用词和标点）
         text1 = "The study uses Structural Equation Modeling (SEM) to analyze parenting."
         text2 = "Using Structural Equation Modeling (SEM) for adolescent analysis."
-        
+
         sim = ProfileAggregator.calculate_cosine_similarity(text1, text2)
         self.assertGreater(sim, 0.4)
         self.assertLessEqual(sim, 1.0)
@@ -27,7 +27,7 @@ class TestAggregate(unittest.TestCase):
                 "publication_year": 2024,
                 "open_science_practices": ["Open Data"],
                 "statistical_reporting_style": "Reported mediation confidence intervals",
-                "concepts": []
+                "concepts": [],
             },
             {
                 "paper_id": "W2",
@@ -41,8 +41,8 @@ class TestAggregate(unittest.TestCase):
                 "publication_year": 2023,
                 "open_science_practices": ["None"],
                 "statistical_reporting_style": "None",
-                "concepts": []
-            }
+                "concepts": [],
+            },
         ]
 
         agg = ProfileAggregator()

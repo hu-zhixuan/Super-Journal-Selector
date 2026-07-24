@@ -1,9 +1,9 @@
 import unittest
-from llm_client import LLMClient, get_prompt_fingerprint, EXTRACTION_PROMPT_VERSION
+
+from llm_client import LLMClient, get_prompt_fingerprint
 
 
 class TestLLMClient(unittest.TestCase):
-
     def test_prompt_fingerprint(self):
         # 验证相同参数生成相同指纹，不同参数生成不同指纹
         fp1 = get_prompt_fingerprint("v1.3", "deepseek-v4-flash", 0.1, "system prompt A")
@@ -21,7 +21,7 @@ class TestLLMClient(unittest.TestCase):
         client.total_api_calls = 5
 
         stats = client.get_cost_statistics()
-        
+
         self.assertEqual(stats["total_api_calls"], 5)
         self.assertEqual(stats["total_prompt_tokens"], 1_000_000)
         self.assertEqual(stats["total_completion_tokens"], 1_000_000)
@@ -33,7 +33,7 @@ class TestLLMClient(unittest.TestCase):
         client = LLMClient()
         raw_text = 'Here is the JSON:\n```json\n{"status": "ok", "value": 123}\n```\nHope it helps!'
         extracted = client.extract_json_from_text(raw_text)
-        
+
         self.assertEqual(extracted.get("status"), "ok")
         self.assertEqual(extracted.get("value"), 123)
 

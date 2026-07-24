@@ -1,10 +1,10 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from fetch_papers import OpenAlexFetcher, PaperRecord, deduplicate_papers
 
 
 class TestFetchPapers(unittest.TestCase):
-
     def test_deduplicate_papers(self):
         # 准备去重测试数据
         # 两个标题足够长，使得前 60 个字符完全一致，测试前缀去重
@@ -16,7 +16,7 @@ class TestFetchPapers(unittest.TestCase):
             cited_by_count=10,
             publication_year=2024,
             source_title="Computers in Human Behavior",
-            concepts=[]
+            concepts=[],
         )
         # DOI 相同
         p2 = PaperRecord(
@@ -27,7 +27,7 @@ class TestFetchPapers(unittest.TestCase):
             cited_by_count=15,
             publication_year=2024,
             source_title="Computers in Human Behavior",
-            concepts=[]
+            concepts=[],
         )
         # ID 相同
         p3 = PaperRecord(
@@ -38,7 +38,7 @@ class TestFetchPapers(unittest.TestCase):
             cited_by_count=5,
             publication_year=2024,
             source_title="Computers in Human Behavior",
-            concepts=[]
+            concepts=[],
         )
         # 归一化标题相同
         p4 = PaperRecord(
@@ -49,7 +49,7 @@ class TestFetchPapers(unittest.TestCase):
             cited_by_count=50,
             publication_year=2024,
             source_title="Computers in Human Behavior",
-            concepts=[]
+            concepts=[],
         )
         # 年份 + 前缀相同
         p5 = PaperRecord(
@@ -60,7 +60,7 @@ class TestFetchPapers(unittest.TestCase):
             cited_by_count=2,
             publication_year=2024,
             source_title="Computers in Human Behavior",
-            concepts=[]
+            concepts=[],
         )
 
         raw_list = [p1, p2, p3, p4, p5]
@@ -80,7 +80,7 @@ class TestFetchPapers(unittest.TestCase):
                     "id": "https://openalex.org/S1",
                     "display_name": "Computers in Human Behavior",
                     "counts_by_year": [{"year": 2024, "works_count": 100}],
-                    "summary_stats": {"2yr_mean_citedness": 5.4}
+                    "summary_stats": {"2yr_mean_citedness": 5.4},
                 }
             ]
         }

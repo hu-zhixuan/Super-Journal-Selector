@@ -1,9 +1,11 @@
-import os
 import json
 import logging
-import requests
-from typing import Dict, Any, List, Optional
+import os
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import requests
+
 from llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -48,7 +50,7 @@ class JournalRouter:
                 "https://api.openalex.org/sources",
                 params={"search": journal_name, "per-page": 1},
                 proxies={"http": None, "https": None},
-                timeout=8
+                timeout=8,
             )
             if resp.status_code == 200:
                 results = resp.json().get("results", [])
@@ -58,9 +60,7 @@ class JournalRouter:
                     counts = item.get("counts_by_year", [])
                     current_year = datetime.now().year
                     recent_works = sum(
-                        c.get("works_count", 0)
-                        for c in counts
-                        if c.get("year", 0) >= (current_year - 2)
+                        c.get("works_count", 0) for c in counts if c.get("year", 0) >= (current_year - 2)
                     )
                     return {
                         "display_name": item.get("display_name", journal_name),
@@ -133,23 +133,21 @@ class JournalRouter:
                             default_scores = {"reaching": 68, "target": 82, "safe": 91}
                             default_rates = {"reaching": "12%-20%", "target": "25%-35%", "safe": "40%-55%"}
                             zone = partitions.get(j, {}).get("cas_zone", "未知")
-                            valid_tiers.append({
-                                "tier": tier_label,
-                                "journal_name": j.title(),
-                                "fit_score": default_scores[tier_key],
-                                "estimated_acceptance_rate": default_rates[tier_key],
-                                "reason": f"基于中科院分区数据自动补齐 ({zone})"
-                            })
+                            valid_tiers.append(
+                                {
+                                    "tier": tier_label,
+                                    "journal_name": j.title(),
+                                    "fit_score": default_scores[tier_key],
+                                    "estimated_acceptance_rate": default_rates[tier_key],
+                                    "reason": f"基于中科院分区数据自动补齐 ({zone})",
+                                }
+                            )
                             break
 
         res_dict["recommended_tiers"] = valid_tiers
         return res_dict
 
-    def route_journals(
-        self,
-        user_draft_text: str,
-        candidate_journals: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+    def route_journals(self, user_draft_text: str, candidate_journals: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         根据用户草稿与多期刊偏好数据库，输出结构化的多期刊投递阵列。
         融合 OpenAlex 实时指标 + 本地分区证据 + LLM 智能判断。
@@ -164,7 +162,7 @@ class JournalRouter:
                     "computers in human behavior reports",
                     "strategic management journal",
                     "mis quarterly",
-                    "physica a"
+                    "physica a",
                 ]
 
         # 获取候选期刊的 OpenAlex 实时指标（作为 LLM 的证据输入）
@@ -264,37 +262,43 @@ Output MUST be clean, valid JSON matching the following structure without markdo
             for j in candidate_journals:
                 if j not in assigned and self._get_tier_by_partition(j) == tier_key:
                     zone = partitions.get(j, {}).get("cas_zone", "未知")
-                    fallback_tiers.append({
-                        "tier": label,
-                        "journal_name": j.title(),
-                        "fit_score": score,
-                        "estimated_acceptance_rate": rate,
-                        "reason": f"基于本地分区数据 ({zone}) 的默认推荐"
-                    })
+                    fallback_tiers.append(
+                        {
+                            "tier": label,
+                            "journal_name": j.title(),
+                            "fit_score": score,
+                            "estimated_acceptance_rate": rate,
+                            "reason": f"基于本地分区数据 ({zone}) 的默认推荐",
+                        }
+                    )
                     assigned.add(j)
                     break
         # 补齐不足的梯队
         if len(fallback_tiers) < 3:
             for j in candidate_journals:
                 if j not in assigned:
-                    fallback_tiers.append({
-                        "tier": "Target (主投)",
-                        "journal_name": j.title(),
-                        "fit_score": 78,
-                        "estimated_acceptance_rate": "25%-35%",
-                        "reason": "默认候选推荐"
-                    })
+                    fallback_tiers.append(
+                        {
+                            "tier": "Target (主投)",
+                            "journal_name": j.title(),
+                            "fit_score": 78,
+                            "estimated_acceptance_rate": "25%-35%",
+                            "reason": "默认候选推荐",
+                        }
+                    )
                     assigned.add(j)
                     if len(fallback_tiers) >= 3:
                         break
 
         return {
             "draft_summary_note": "（LLM 路由暂时不可用，以下为基于分区数据的默认推荐）",
-            "recommended_tiers": fallback_tiers
+            "recommended_tiers": fallback_tiers,
         }
 
 
 if __name__ == "__main__":
     router = JournalRouter()
-    res = router.route_journals("We analyze adolescent psychological wellbeing and need frustration under social media fatigue using SEM.")
+    res = router.route_journals(
+        "We analyze adolescent psychological wellbeing and need frustration under social media fatigue using SEM."
+    )
     print(json.dumps(res, ensure_ascii=False, indent=2))

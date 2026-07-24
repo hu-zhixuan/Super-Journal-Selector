@@ -1,19 +1,17 @@
 import unittest
+
 from generate_profile import ProfileGenerator
 
 
 class TestCitationValidator(unittest.TestCase):
-
     def test_citation_validator(self):
         aggregated_stats = {
-            "most_similar_papers": [
-                {"title": "The Impact of Social Media Fatigue on Well-being"}
-            ],
+            "most_similar_papers": [{"title": "The Impact of Social Media Fatigue on Well-being"}],
             "recommended_references": [
                 {"title": "Self-Determination Theory in Mobile Media"},
-                {"title": "Quantitative analysis of gaming addiction"}
+                {"title": "Quantitative analysis of gaming addiction"},
             ],
-            "representative_novelties": []
+            "representative_novelties": [],
         }
 
         # 模拟生成报告

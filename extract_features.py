@@ -1,15 +1,17 @@
-import os
+import hashlib
 import json
 import logging
-import hashlib
-import time
+import os
 import threading
-from typing import List, Dict, Any, Optional
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from llm_client import LLMClient
+
 from fetch_papers import PaperRecord
+from llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,7 @@ class ExtractedFeatures(BaseModel):
     """
     单篇论文摘要中由 LLM 提取的规范化特征实体
     """
+
     paper_id: str = Field(description="原始论文ID或DOI")
     method_category: str = Field(
         description="研究方法分类，严格在以下五类中单选其一：Quantitative_Empirical(定量实证/计量/问卷), Qualitative_CaseStudy(定性/案例/扎根/访谈), Mixed_Methods(混合研究), Theoretical_Review(纯理论/综述/观点), Computational_AI_Simulation(计算社会科学/AI/仿真建模)"
@@ -58,11 +61,11 @@ class FeatureExtractor:
         """
         对单篇论文摘要调用 LLM 执行信息抽取，内置本地特征缓存层以节省 API Token 成本。
         """
-        from llm_client import get_prompt_fingerprint, EXTRACTION_PROMPT_VERSION
+        from llm_client import EXTRACTION_PROMPT_VERSION, get_prompt_fingerprint
 
         paper_id_clean = paper.id or paper.doi or "unknown"
         paper_hash = hashlib.md5(paper_id_clean.encode("utf-8")).hexdigest()[:12]
-        
+
         # 从 Pydantic 单一事实来源自动获取 JSON Schema
         schema_json_dict = ExtractedFeatures.model_json_schema()
         schema_str = json.dumps(schema_json_dict, ensure_ascii=False)
@@ -72,9 +75,9 @@ class FeatureExtractor:
             prompt_version=EXTRACTION_PROMPT_VERSION,
             model_name=self.llm.model,
             temperature=0.1,
-            system_prompt=system_prompt + schema_str
+            system_prompt=system_prompt + schema_str,
         )
-        
+
         cache_dir = "cache"
         os.makedirs(cache_dir, exist_ok=True)
         cache_file = os.path.join(cache_dir, f"feature_{paper_hash}_{fingerprint}.json")
@@ -166,8 +169,8 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         生成器版本的 extract_batch，每完成一篇论文特征抽取，就 yield (completed_count, total_count, paper, extracted_results)
         便于 WebUI / CLI 实时接收并更新百分比进度条与状态展示。
         """
-        import threading
         from datetime import datetime
+
         if max_workers is None:
             max_workers = self._get_max_workers()
         logger.info(f"开始开启并发线程池 (Workers={max_workers})，批量结构化解析 {len(papers)} 篇大样本论文特征...")
@@ -198,23 +201,27 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
                     if res:
                         extracted_results.append(res)
                     else:
-                        self.failed_papers.append({
+                        self.failed_papers.append(
+                            {
+                                "paper_id": p.id or p.doi or "unknown",
+                                "title": p.title,
+                                "error_type": "ExtractionFailure",
+                                "error_message": "LLM extraction returned null feature object",
+                                "retry_count": 3,
+                                "timestamp": datetime.now().isoformat(),
+                            }
+                        )
+                except Exception as exc:
+                    self.failed_papers.append(
+                        {
                             "paper_id": p.id or p.doi or "unknown",
                             "title": p.title,
-                            "error_type": "ExtractionFailure",
-                            "error_message": "LLM extraction returned null feature object",
+                            "error_type": type(exc).__name__,
+                            "error_message": str(exc),
                             "retry_count": 3,
-                            "timestamp": datetime.now().isoformat()
-                        })
-                except Exception as exc:
-                    self.failed_papers.append({
-                        "paper_id": p.id or p.doi or "unknown",
-                        "title": p.title,
-                        "error_type": type(exc).__name__,
-                        "error_message": str(exc),
-                        "retry_count": 3,
-                        "timestamp": datetime.now().isoformat()
-                    })
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    )
                 yield completed_count, total_count, p, extracted_results
 
         logger.info(f"并发解析完成，成功获得 {len(extracted_results)}/{total_count} 篇大样本有效特征实体。")
@@ -227,4 +234,3 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         for _, _, _, current_results in self.extract_batch_iter(papers, max_workers=max_workers):
             results = current_results
         return results
-

@@ -1,19 +1,20 @@
-import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
-import os
-import sys
-import re
-import time
-import json
-import hashlib
 import argparse
+import hashlib
+import json
 import logging
-from typing import Optional, List, Dict, Any
+import os
+import re
+import sys
+import time
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from dotenv import load_dotenv
 
-from fetch_papers import OpenAlexFetcher
-from extract_features import FeatureExtractor
+import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
 from aggregate import ProfileAggregator
+from extract_features import FeatureExtractor
+from fetch_papers import OpenAlexFetcher
 from generate_profile import ProfileGenerator
 from llm_client import LLMClient
 
@@ -44,6 +45,7 @@ def read_user_draft(file_path: Optional[str]) -> Optional[str]:
 
         if suffix == ".docx":
             import docx
+
             doc = docx.Document(path)
             return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
@@ -51,6 +53,7 @@ def read_user_draft(file_path: Optional[str]) -> Optional[str]:
             # 优先使用 PyMuPDF (fitz) 进行高保真解析，未安装则降级为 pypdf
             try:
                 import fitz  # PyMuPDF
+
                 text_parts = []
                 with fitz.open(path) as doc:
                     for page in doc:
@@ -60,6 +63,7 @@ def read_user_draft(file_path: Optional[str]) -> Optional[str]:
             except ImportError:
                 logger.info("未检测到 PyMuPDF (fitz)，将降级使用 pypdf 进行解析。")
                 import pypdf
+
                 reader = pypdf.PdfReader(path)
                 text_list = []
                 for page in reader.pages:
@@ -89,7 +93,7 @@ def extract_search_keywords(llm_client: LLMClient, text: str) -> List[str]:
 
     Constraints:
     1. Each keyword phrase must contain 2 to 6 English words.
-    2. DO NOT use extremely generic terms like "artificial intelligence", "education", "behavior", "system", "performance", "method", "technology". 
+    2. DO NOT use extremely generic terms like "artificial intelligence", "education", "behavior", "system", "performance", "method", "technology".
     3. Focus on specific theories, models, methodologies, research subjects, or application contexts.
 
     Draft:
@@ -102,15 +106,22 @@ def extract_search_keywords(llm_client: LLMClient, text: str) -> List[str]:
         keywords = llm_client.call_json(
             prompt=prompt,
             system_prompt="You are an expert academic metadata extractor. Output valid JSON array only.",
-            temperature=0.1
+            temperature=0.1,
         )
         if isinstance(keywords, list):
             valid_keywords = [
-                k.strip() for k in keywords 
-                if isinstance(k, str) and len(k.split()) >= 2 and len(k.split()) <= 6
+                k.strip() for k in keywords if isinstance(k, str) and len(k.split()) >= 2 and len(k.split()) <= 6
             ]
             # 排除黑名单泛词
-            generic_blacklist = {"artificial intelligence", "education", "behavior", "technology", "system", "performance", "method"}
+            generic_blacklist = {
+                "artificial intelligence",
+                "education",
+                "behavior",
+                "technology",
+                "system",
+                "performance",
+                "method",
+            }
             valid_keywords = [k for k in valid_keywords if k.lower() not in generic_blacklist]
             if valid_keywords:
                 logger.info(f"成功通过大模型提取特异性学术检索关键词: {valid_keywords}")
@@ -141,7 +152,7 @@ def run_journal_profile_skill(
     years: int = 3,
     max_papers: int = 100,
     user_draft_path: Optional[str] = None,
-    output_path: Optional[str] = None
+    output_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     期刊选稿画像助手核心 Skill 服务入口。
@@ -153,13 +164,14 @@ def run_journal_profile_skill(
     try:
         # 步骤准备与草稿解析
         user_draft_text = read_user_draft(user_draft_path)
-        
+
         search_query = None
         keywords = []
         llm_client = LLMClient()
 
         if user_draft_text:
             from aggregate import clean_and_truncate_draft
+
             user_draft_text = clean_and_truncate_draft(user_draft_text)
             keywords = extract_search_keywords(llm_client, user_draft_text)
             if keywords:
@@ -171,7 +183,7 @@ def run_journal_profile_skill(
         draft_hash = hashlib.md5(user_draft_text.encode("utf-8")).hexdigest()[:8] if user_draft_text else "nodraft"
         keywords_str = "_".join(keywords) if keywords else "nokeywords"
         from llm_client import EXTRACTION_PROMPT_VERSION
-        
+
         config_str = f"{journal_slug}_{years}_{max_papers}_{draft_hash}_{keywords_str}_{EXTRACTION_PROMPT_VERSION}_{llm_client.model}"
         query_hash = hashlib.md5(config_str.encode("utf-8")).hexdigest()[:10]
 
@@ -185,31 +197,30 @@ def run_journal_profile_skill(
         logger.info("--- Layer ①: 进入开放文献抓取层 (OpenAlex API) ---")
         fetcher = OpenAlexFetcher()
         papers, journal_metadata = fetcher.fetch_recent_papers(
-            journal_name=journal,
-            years=years,
-            max_papers=max_papers,
-            search_query=search_query
+            journal_name=journal, years=years, max_papers=max_papers, search_query=search_query
         )
 
         if not papers:
             return {
                 "status": "error",
                 "error_code": "NO_PAPERS_FETCHED",
-                "message": "未能抓取到任何有效的论文样本，流程中止。"
+                "message": "未能抓取到任何有效的论文样本，流程中止。",
             }
 
         # Layer ②: LLM 结构化提取
         logger.info("--- Layer ②: 进入 LLM 结构化特征提取层 ---")
         extractor = FeatureExtractor(llm_client=llm_client)
         features = extractor.extract_batch(papers)
-        
+
         # 失败样本记录
         if extractor.failed_papers:
             failed_path = os.path.join(output_dir, "failed_papers.json")
             try:
                 with open(failed_path, "w", encoding="utf-8") as ff:
                     json.dump(extractor.failed_papers, ff, ensure_ascii=False, indent=2)
-                logger.warning(f"检测到 {len(extractor.failed_papers)} 篇论文特征提取失败，详细清单已落盘: {failed_path}")
+                logger.warning(
+                    f"检测到 {len(extractor.failed_papers)} 篇论文特征提取失败，详细清单已落盘: {failed_path}"
+                )
             except Exception as e_fail_w:
                 logger.warning(f"写入失败文献记录出错: {e_fail_w}")
 
@@ -217,7 +228,7 @@ def run_journal_profile_skill(
             return {
                 "status": "error",
                 "error_code": "FEATURE_EXTRACTION_FAILED",
-                "message": "特征结构化分析层未成功提取到任何特征记录，流程中止。"
+                "message": "特征结构化分析层未成功提取到任何特征记录，流程中止。",
             }
 
         # Layer ③: 纯代码统计聚合
@@ -281,52 +292,35 @@ def run_journal_profile_skill(
             "cost_statistics": cost_stats,
             "report_markdown": report_markdown,
             "output_directory": output_dir,
-            "report_path": final_output_path
+            "report_path": final_output_path,
         }
 
     except Exception as e:
         logger.error(f"流水线运行中发生致命异常: {e}")
-        return {
-            "status": "error",
-            "error_code": type(e).__name__,
-            "message": str(e)
-        }
+        return {"status": "error", "error_code": type(e).__name__, "message": str(e)}
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="期刊选稿画像助手 (Journal Profile Assistant) - 4层数据驱动流水线"
-    )
+    parser = argparse.ArgumentParser(description="期刊选稿画像助手 (Journal Profile Assistant) - 4层数据驱动流水线")
     parser.add_argument(
-        "-j", "--journal",
+        "-j",
+        "--journal",
         type=str,
         required=True,
-        help="目标期刊英文全称，如 'Strategic Management Journal' 或 'Computers in Human Behavior'"
+        help="目标期刊英文全称，如 'Strategic Management Journal' 或 'Computers in Human Behavior'",
+    )
+    parser.add_argument("-y", "--years", type=int, default=3, help="回溯检索最近几年的论文摘要（默认: 3年）")
+    parser.add_argument(
+        "-m", "--max-papers", type=int, default=100, help="抓取并并发解析的近期论文大样本数量上限（默认: 100篇）"
     )
     parser.add_argument(
-        "-y", "--years",
-        type=int,
-        default=3,
-        help="回溯检索最近几年的论文摘要（默认: 3年）"
-    )
-    parser.add_argument(
-        "-m", "--max-papers",
-        type=int,
-        default=100,
-        help="抓取并并发解析的近期论文大样本数量上限（默认: 100篇）"
-    )
-    parser.add_argument(
-        "-u", "--user-draft",
+        "-u",
+        "--user-draft",
         type=str,
         default=None,
-        help="可选：待投稿论文摘要或草稿文件路径 (.docx/.pdf/.txt/.md)，用于生成定制化修改建议"
+        help="可选：待投稿论文摘要或草稿文件路径 (.docx/.pdf/.txt/.md)，用于生成定制化修改建议",
     )
-    parser.add_argument(
-        "-o", "--output",
-        type=str,
-        default=None,
-        help="可选：指定输出报告 Markdown 文件保存路径"
-    )
+    parser.add_argument("-o", "--output", type=str, default=None, help="可选：指定输出报告 Markdown 文件保存路径")
 
     args = parser.parse_args()
     load_dotenv()
@@ -344,7 +338,7 @@ def main():
         years=args.years,
         max_papers=args.max_papers,
         user_draft_path=args.user_draft,
-        output_path=args.output
+        output_path=args.output,
     )
 
     if res.get("status") == "error":
@@ -352,7 +346,7 @@ def main():
         sys.exit(1)
     else:
         cost = res.get("cost_statistics", {})
-        logger.info(f"=== 运行统计 ===")
+        logger.info("=== 运行统计 ===")
         logger.info(f"API 总请求次数: {cost.get('total_api_calls')} 次")
         logger.info(f"总 Prompt Token 消耗: {cost.get('total_prompt_tokens')} (源: {cost.get('token_source')})")
         logger.info(f"总 Completion Token 消耗: {cost.get('total_completion_tokens')} (源: {cost.get('token_source')})")
@@ -364,4 +358,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
