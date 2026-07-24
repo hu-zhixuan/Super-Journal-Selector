@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime
-from typing import Any
+from typing import Any, Dict
 
 # 引入文档解析库
 import docx
@@ -149,8 +149,12 @@ def search_journals(query: str):
     for term in search_terms:
         url = "https://api.openalex.org/sources"
         try:
+            params: Dict[str, Any] = {"search": term, "per-page": 6}
             resp = requests.get(
-                url, params={"search": term, "per-page": 6}, proxies={"http": None, "https": None}, timeout=5
+                url,
+                params=params,
+                proxies={"http": None, "https": None},  # type: ignore[dict-item]
+                timeout=5,
             )
             if resp.status_code == 200:
                 results = resp.json().get("results", [])

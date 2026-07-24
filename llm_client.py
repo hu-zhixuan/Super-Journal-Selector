@@ -81,9 +81,9 @@ class LLMClient:
         timeout: Optional[int] = None,
         max_tokens: Optional[int] = None,
     ):
-        self.api_key = api_key or os.getenv("LLM_API_KEY")
-        self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://fxb.supa.net.cn:6443")
-        self.model = model or os.getenv("LLM_MODEL", "deepseek-v4-flash")
+        self.api_key: Optional[str] = api_key or os.getenv("LLM_API_KEY")
+        self.base_url: str = base_url or os.getenv("LLM_BASE_URL") or "https://fxb.supa.net.cn:6443"
+        self.model: str = model or os.getenv("LLM_MODEL") or "deepseek-v4-flash"
         # 可用 LLM_TIMEOUT / LLM_MAX_TOKENS 环境变量全局调整（长报告生成在调用处单独放宽）
         self.timeout = timeout if timeout is not None else int(os.getenv("LLM_TIMEOUT", "60"))
         self.max_tokens = max_tokens if max_tokens is not None else int(os.getenv("LLM_MAX_TOKENS", "4000"))
@@ -239,7 +239,7 @@ class LLMClient:
         effective_timeout = timeout or self.timeout
 
         for url_idx, (target_url, active_key) in enumerate(endpoints):
-            headers = self._build_headers(active_key)
+            headers = self._build_headers(active_key or "")
             payload = self._build_payload(prompt, system_prompt, temperature, max_tokens=max_tokens)
 
             for attempt in range(1, max_retries + 1):

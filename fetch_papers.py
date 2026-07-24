@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -21,7 +21,7 @@ class PaperRecord:
     publication_year: int
     cited_by_count: int
     source_title: str
-    concepts: List[str] = None
+    concepts: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         if self.concepts is None:
@@ -78,6 +78,11 @@ def deduplicate_papers(papers: List[PaperRecord]) -> List[PaperRecord]:
     return deduped
 
 
+# 显式禁用 requests 的系统代理（规避 VPN/企业代理对学术 API 的 SSL 中间人拦截）；
+# 标注为 Any 以兼容 requests 类型存根（其声明的 proxies 不接受 None 值）
+_NO_SYSTEM_PROXY: Any = {"http": None, "https": None}
+
+
 class OpenAlexFetcher:
     """
     层①：数据抓取层。封装 OpenAlex 开放 API（无需 key），获取目标期刊最近N年的论文摘要文本并结构化。
@@ -100,9 +105,9 @@ class OpenAlexFetcher:
         匹配或检索 OpenAlex 中的 Journal Source ID。
         """
         url = f"{self.BASE_URL}/sources"
-        params = {"search": journal_name, "per-page": 5}
+        params: Dict[str, Any] = {"search": journal_name, "per-page": 5}
         try:
-            resp = requests.get(url, params=params, proxies={"http": None, "https": None}, timeout=15)
+            resp = requests.get(url, params=params, proxies=_NO_SYSTEM_PROXY, timeout=15)
             resp.raise_for_status()
             data = resp.json()
             results = data.get("results", [])
@@ -293,14 +298,18 @@ class OpenAlexFetcher:
         if target_a > 0:
             filter_str = f"primary_location.source.id:{source_id},publication_year:>{min_year},has_abstract:true"
             url = f"{self.BASE_URL}/works"
-            params = {
+            params: Dict[str, Any] = {
                 "filter": filter_str,
                 "sort": "cited_by_count:desc",
                 "per-page": min(target_a * 2, 200),
             }
             try:
                 resp = requests.get(
-                    url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                    url,
+                    params=params,
+                    headers=self.headers,
+                    proxies=_NO_SYSTEM_PROXY,
+                    timeout=25,
                 )
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
@@ -327,7 +336,11 @@ class OpenAlexFetcher:
             }
             try:
                 resp = requests.get(
-                    url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                    url,
+                    params=params,
+                    headers=self.headers,
+                    proxies=_NO_SYSTEM_PROXY,
+                    timeout=25,
                 )
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
@@ -349,7 +362,11 @@ class OpenAlexFetcher:
                     del params["search"]
                 try:
                     resp = requests.get(
-                        url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                        url,
+                        params=params,
+                        headers=self.headers,
+                        proxies=_NO_SYSTEM_PROXY,
+                        timeout=25,
                     )
                     resp.raise_for_status()
                     results = resp.json().get("results", [])
@@ -373,7 +390,7 @@ class OpenAlexFetcher:
                     # 组合 Europe PMC 检索语句
                     epmc_query = f'JOURNAL:"{source_display_name}" AND ({search_query}) AND PUB_YEAR:[{min_year} TO {current_year}] AND HAS_ABSTRACT:Y'
                     epmc_url = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
-                    epmc_params = {
+                    epmc_params: Dict[str, Any] = {
                         "query": epmc_query,
                         "format": "json",
                         "pageSize": min(target_b * 2, 50),
@@ -381,7 +398,10 @@ class OpenAlexFetcher:
                         "sort": "CITED desc",
                     }
                     resp_epmc = requests.get(
-                        epmc_url, params=epmc_params, proxies={"http": None, "https": None}, timeout=20
+                        epmc_url,
+                        params=epmc_params,
+                        proxies=_NO_SYSTEM_PROXY,
+                        timeout=20,
                     )
                     if resp_epmc.status_code == 200:
                         epmc_results = resp_epmc.json().get("resultList", {}).get("result", [])
@@ -439,7 +459,11 @@ class OpenAlexFetcher:
             }
             try:
                 resp = requests.get(
-                    url, params=params, headers=self.headers, proxies={"http": None, "https": None}, timeout=25
+                    url,
+                    params=params,
+                    headers=self.headers,
+                    proxies=_NO_SYSTEM_PROXY,
+                    timeout=25,
                 )
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])

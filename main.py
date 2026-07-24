@@ -46,7 +46,7 @@ def read_user_draft(file_path: Optional[str]) -> Optional[str]:
         if suffix == ".docx":
             import docx
 
-            doc = docx.Document(path)
+            doc = docx.Document(str(path))
             return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
         if suffix == ".pdf":

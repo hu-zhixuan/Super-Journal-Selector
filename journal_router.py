@@ -25,7 +25,7 @@ class JournalRouter:
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm = llm_client or LLMClient()
-        self._partitions_cache = None
+        self._partitions_cache: Optional[Dict[str, Any]] = None
 
     def _load_partitions(self) -> Dict[str, Any]:
         """加载并缓存本地期刊分区数据库"""
@@ -46,10 +46,11 @@ class JournalRouter:
     def _fetch_openalex_metrics(self, journal_name: str) -> Optional[Dict[str, Any]]:
         """从 OpenAlex 获取期刊实时指标（发文量、IF、H-index）"""
         try:
+            params: Dict[str, Any] = {"search": journal_name, "per-page": 1}
             resp = requests.get(
                 "https://api.openalex.org/sources",
-                params={"search": journal_name, "per-page": 1},
-                proxies={"http": None, "https": None},
+                params=params,
+                proxies={"http": None, "https": None},  # type: ignore[dict-item]
                 timeout=8,
             )
             if resp.status_code == 200:

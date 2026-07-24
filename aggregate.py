@@ -263,7 +263,7 @@ class ProfileAggregator:
         top_tools = Counter(all_tools).most_common(12)
 
         # 5b. 开源科学实践聚合统计
-        open_science_counter = Counter()
+        open_science_counter: Counter[str] = Counter()
         for f in features_list:
             practices = f.get("open_science_practices", [])
             if not practices:

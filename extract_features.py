@@ -55,7 +55,7 @@ class FeatureExtractor:
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm = llm_client or LLMClient()
-        self.failed_papers = []
+        self.failed_papers: List[Dict[str, Any]] = []
 
     def extract_paper(self, paper: PaperRecord) -> Optional[ExtractedFeatures]:
         """
