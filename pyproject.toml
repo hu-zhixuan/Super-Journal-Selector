@@ -49,3 +49,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+# 裸 pytest 命令启动时 CWD 不在 sys.path 中（区别于 python -m pytest），
+# 需显式注入仓库根目录，否则 tests/ 无法 import 顶层模块（CI 报 exit code 2）
+pythonpath = ["."]
