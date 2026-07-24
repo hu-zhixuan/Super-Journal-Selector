@@ -160,6 +160,24 @@ class OpenAlexFetcher:
         word_list.sort(key=lambda x: x["pos"])
         return " ".join([item["word"] for item in word_list])
 
+    @staticmethod
+    def _build_paper_from_openalex(item: Dict[str, Any], source_display_name: str, current_year: int) -> Optional[PaperRecord]:
+        """从 OpenAlex 单条记录构建 PaperRecord，自动还原倒排摘要并过滤过短摘要。"""
+        abstract_text = OpenAlexFetcher._reconstruct_abstract(item.get("abstract_inverted_index"))
+        if len(abstract_text.split()) < 40:
+            return None
+        concept_names = [c.get("display_name") for c in item.get("concepts", [])[:6] if c.get("display_name")]
+        return PaperRecord(
+            id=item.get("id", ""),
+            doi=item.get("doi", "") or "",
+            title=item.get("title", "Untitled"),
+            abstract=abstract_text,
+            publication_year=item.get("publication_year", current_year),
+            cited_by_count=item.get("cited_by_count", 0),
+            source_title=source_display_name,
+            concepts=concept_names,
+        )
+
     def fetch_recent_papers(
         self, journal_name: str, years: int = 3, max_papers: int = 100, search_query: Optional[str] = None
     ) -> Tuple[List[PaperRecord], Dict[str, Any]]:
@@ -281,20 +299,9 @@ class OpenAlexFetcher:
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
                 for item in results:
-                    abstract_text = self._reconstruct_abstract(item.get("abstract_inverted_index"))
-                    if len(abstract_text.split()) < 40:
+                    paper = self._build_paper_from_openalex(item, source_display_name, current_year)
+                    if not paper:
                         continue
-                    concept_names = [c.get("display_name") for c in item.get("concepts", [])[:6] if c.get("display_name")]
-                    paper = PaperRecord(
-                        id=item.get("id", ""),
-                        doi=item.get("doi", "") or "",
-                        title=item.get("title", "Untitled"),
-                        abstract=abstract_text,
-                        publication_year=item.get("publication_year", current_year),
-                        cited_by_count=item.get("cited_by_count", 0),
-                        source_title=source_display_name,
-                        concepts=concept_names,
-                    )
                     papers_channel_a.append(paper)
                     if len(papers_channel_a) >= target_a:
                         break
@@ -317,20 +324,9 @@ class OpenAlexFetcher:
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
                 for item in results:
-                    abstract_text = self._reconstruct_abstract(item.get("abstract_inverted_index"))
-                    if len(abstract_text.split()) < 40:
+                    paper = self._build_paper_from_openalex(item, source_display_name, current_year)
+                    if not paper:
                         continue
-                    concept_names = [c.get("display_name") for c in item.get("concepts", [])[:6] if c.get("display_name")]
-                    paper = PaperRecord(
-                        id=item.get("id", ""),
-                        doi=item.get("doi", "") or "",
-                        title=item.get("title", "Untitled"),
-                        abstract=abstract_text,
-                        publication_year=item.get("publication_year", current_year),
-                        cited_by_count=item.get("cited_by_count", 0),
-                        source_title=source_display_name,
-                        concepts=concept_names,
-                    )
                     papers_channel_b.append(paper)
                 logger.info(f"路线 B1 (OpenAlex Search) 获取: {len(papers_channel_b)} 篇。")
             except Exception as e_b1:
@@ -349,20 +345,9 @@ class OpenAlexFetcher:
                     results = resp.json().get("results", [])
                     b2_count = 0
                     for item in results:
-                        abstract_text = self._reconstruct_abstract(item.get("abstract_inverted_index"))
-                        if len(abstract_text.split()) < 40:
+                        paper = self._build_paper_from_openalex(item, source_display_name, current_year)
+                        if not paper:
                             continue
-                        concept_names = [c.get("display_name") for c in item.get("concepts", [])[:6] if c.get("display_name")]
-                        paper = PaperRecord(
-                            id=item.get("id", ""),
-                            doi=item.get("doi", "") or "",
-                            title=item.get("title", "Untitled"),
-                            abstract=abstract_text,
-                            publication_year=item.get("publication_year", current_year),
-                            cited_by_count=item.get("cited_by_count", 0),
-                            source_title=source_display_name,
-                            concepts=concept_names,
-                        )
                         papers_channel_b.append(paper)
                         b2_count += 1
                     logger.info(f"路线 B2 (Title Search) 补齐了 {b2_count} 篇，累计 B 通道达到: {len(papers_channel_b)} 篇。")
@@ -439,20 +424,9 @@ class OpenAlexFetcher:
                 if resp.status_code == 200:
                     results = resp.json().get("results", [])
                     for item in results:
-                        abstract_text = self._reconstruct_abstract(item.get("abstract_inverted_index"))
-                        if len(abstract_text.split()) < 40:
+                        paper = self._build_paper_from_openalex(item, source_display_name, current_year)
+                        if not paper:
                             continue
-                        concept_names = [c.get("display_name") for c in item.get("concepts", [])[:6] if c.get("display_name")]
-                        paper = PaperRecord(
-                            id=item.get("id", ""),
-                            doi=item.get("doi", "") or "",
-                            title=item.get("title", "Untitled"),
-                            abstract=abstract_text,
-                            publication_year=item.get("publication_year", current_year),
-                            cited_by_count=item.get("cited_by_count", 0),
-                            source_title=source_display_name,
-                            concepts=concept_names,
-                        )
                         deduped_papers.append(paper)
                     deduped_papers = deduplicate_papers(deduped_papers)
             except Exception as e_pad:

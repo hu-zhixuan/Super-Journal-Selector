@@ -225,6 +225,20 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
         from aggregate import clean_and_truncate_draft
         final_draft_text = clean_and_truncate_draft(final_draft_text)
 
+    # 提取草稿检索关键词，触发双通道主题匹配检索（与 CLI/SDK 入口对齐）
+    search_query = None
+    if final_draft_text:
+        try:
+            progress(0.02, desc="正在提取草稿检索关键词以开启双通道主题匹配...")
+            yield "⏳ [1/4] 正在从草稿中提取学术检索关键词，开启双通道动态对标检索...", ""
+            from main import extract_search_keywords
+            from llm_client import LLMClient
+            keywords = extract_search_keywords(LLMClient(), final_draft_text)
+            if keywords:
+                search_query = " ".join(keywords)
+        except Exception as e_kw:
+            logger.warning(f"草稿关键词提取失败，将降级为纯高引热门检索: {e_kw}")
+
     try:
         # Layer ①: 抓取数据
         progress(0.05, desc="正在连接 OpenAlex 检索期刊 ID 并拉取近年发文摘要...")
@@ -234,6 +248,7 @@ def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str
             journal_name=journal_name,
             years=int(years),
             max_papers=int(max_papers),
+            search_query=search_query,
         )
         if not papers:
             yield f"❌ 错误：未在 OpenAlex 中检索到期刊 '{journal_name}' 或近几年该刊无有效发文。", ""

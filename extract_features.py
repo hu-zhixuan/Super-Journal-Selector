@@ -124,7 +124,7 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
             raise e
 
     # 类级别的 QPS 控制机制
-    _qps_lock = threading.Lock() if 'threading' in globals() else None
+    _qps_lock = threading.Lock()
     _last_req_time = [0.0]
 
     @staticmethod
@@ -147,10 +147,6 @@ Output MUST be clean valid JSON only matching the schema above, without extra co
         """
         线程安全的 QPS 限速机制（默认 4 QPS）。使用时间槽平滑分配算法，消除死锁与累积延迟。
         """
-        import threading
-        if not FeatureExtractor._qps_lock:
-            FeatureExtractor._qps_lock = threading.Lock()
-        
         interval = 1.0 / self._get_qps_limit()
         sleep_time = 0.0
         with FeatureExtractor._qps_lock:
