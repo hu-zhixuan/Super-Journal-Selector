@@ -30,6 +30,8 @@ def patched_create_connection(address, *args, **kwargs):
     host, port = address
     if host == "fxb.supa.net.cn" and DEFAULT_DIRECT_IP:
         try:
+            # 调用 install_dns_patch() 保存的原始 create_connection 引用，
+            # 将 fxb 域名直连到已探测的固定 IP，绕过异常 DNS
             return urllib3_cn._orig_create_connection((DEFAULT_DIRECT_IP, port), *args, **kwargs)
         except Exception:
             pass
@@ -39,6 +41,8 @@ def patched_create_connection(address, *args, **kwargs):
 def install_dns_patch():
     if ENABLE_LLM_DNS_PATCH:
         if not hasattr(urllib3_cn, "_orig_create_connection"):
+            # 保存原始 create_connection 引用供补丁函数调用（此处命名为 _orig 前缀
+            # 保存原引用；patched_create_connection 内通过 _orig 属性访问原始函数）
             urllib3_cn._orig_create_connection = urllib3_cn.create_connection
             urllib3_cn.create_connection = patched_create_connection
             logger.info(f"已成功加载 Socket DNS 直连补丁：fxb.supa.net.cn -> {DEFAULT_DIRECT_IP}")

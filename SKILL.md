@@ -1,6 +1,7 @@
 ---
 name: journal-profile-assistant
 description: 期刊选稿画像与投稿诊断技能。基于 OpenAlex 百篇级真实论文抓取与 LLM 结构化特征提取，量化生成目标期刊的选稿偏好画像；支持论文草稿 Desk Reject 风险诊断、语义对标、多期刊投递梯队路由与模拟审稿人对话。当用户需要选择投稿期刊、评估稿件与期刊匹配度、或获取投稿前修改建议时使用本技能。
+when_to_use: 当用户询问投稿期刊选择、期刊选稿偏好画像、稿件与期刊匹配度评估、Desk Reject 风险诊断或投稿前修改建议时，调用本技能生成基于真实大样本数据的循证报告。
 ---
 
 # 期刊选稿画像助手 (Journal Profile Assistant)
@@ -24,6 +25,21 @@ Layer 2: LLM 并发结构化特征提取（Pydantic Schema 约束 + 本地缓存
 Layer 3: 纯代码统计聚合（分布/中位数/语义余弦相似度，无 LLM 幻觉）
 Layer 4: LLM 循证报告生成（证据引用校验 + 投稿建议）
 ```
+
+## 执行步骤（Agent 调用引导）
+
+1. **环境校验**：确认项目根目录为 `提交包/-skill/`，存在 `.env`（含 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`），依赖已按 `requirements.txt` 安装。缺 `.env` 时提示用户复制 `.env.example` 配置后重试。
+2. **确认输入**：目标期刊英文全称（必填，如 `Computers in Human Behavior`）；可选论文草稿文件路径（.txt/.md/.docx/.pdf）；样本年份 `years`（默认 3）、样本量 `max_papers`（默认 100）。
+3. **执行流水线**：
+   - CLI：`python main.py -j "<期刊名>" -y <年份> -m <数量> [-u <草稿路径>] [-o <输出路径>]`
+   - SDK：`from main import run_journal_profile_skill; result = run_journal_profile_skill(journal=..., years=..., max_papers=..., user_draft_path=...)`
+4. **读取产物**：
+   - 报告 Markdown：`output/<期刊名>/report.md`（未提供草稿）或 `output/<期刊名>_with_draft_<hash>/report.md`（提供草稿）
+   - 中间数据：`papers.json` / `features.json` / `aggregated_stats.json` / `execution_stats.json`；失败样本 `failed_papers.json`
+5. **失败处理**：返回 `status: "error"` 时，按 `error_code` 处理——
+   - `NO_PAPERS_FETCHED`：期刊名无法在 OpenAlex 定位或无带摘要样本，换用其他期刊名或加大 `years`
+   - `FEATURE_EXTRACTION_FAILED`：LLM 提取 0 篇成功，检查 `.env` 密钥/额度与 `LLM_EXTRACT_QPS`
+   - 其他异常：按 `message` 排查网络 / 依赖 / 模型缓存（详见"常见问题"）
 
 ## 使用方式
 
@@ -96,3 +112,10 @@ python -c "from modelscope import snapshot_download; snapshot_download('sentence
 ```bash
 python -m unittest discover -s tests
 ```
+
+## 常见问题
+
+**Q: 进度卡在"正在启动统计引擎计算余弦相似度"不动？**
+
+原因：首次运行需下载语义模型 `all-MiniLM-L6-v2`（约 90MB），国内直连 huggingface.co 慢时会反复重试。
+解决：ModelScope 预下载（见"安装依赖"）、或 `.env` 设 `HF_HUB_OFFLINE=1` 降级为 BoW 相似度、或用 `EMBEDDING_MODEL_PATH` 指定本地模型目录。

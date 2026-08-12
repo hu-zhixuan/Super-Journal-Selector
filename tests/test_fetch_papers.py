@@ -93,6 +93,41 @@ class TestFetchPapers(unittest.TestCase):
         self.assertEqual(res["id"], "https://openalex.org/S1")
         self.assertEqual(res["display_name"], "Computers in Human Behavior")
 
+    @patch("requests.get")
+    def test_resolve_journal_source_exact_name_wins_over_active_subjournal(self, mock_get):
+        """
+        精确匹配优先：目标期刊名与候选完全相等时应优先命中主刊，
+        即使同名子刊（如 Reports）近3年发文更多，也不应被其挤掉。
+        """
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "results": [
+                {
+                    "id": "https://openalex.org/S4210198611",
+                    "display_name": "Computers in Human Behavior Reports",
+                    "counts_by_year": [
+                        {"year": 2024, "works_count": 400},
+                        {"year": 2025, "works_count": 438},
+                    ],
+                },
+                {
+                    "id": "https://openalex.org/S1",
+                    "display_name": "Computers in Human Behavior",
+                    "counts_by_year": [
+                        {"year": 2024, "works_count": 100},
+                    ],
+                },
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        fetcher = OpenAlexFetcher(email="test@example.com")
+        res = fetcher.resolve_journal_source("Computers in Human Behavior")
+
+        self.assertIsNotNone(res)
+        self.assertEqual(res["id"], "https://openalex.org/S1")
+        self.assertEqual(res["display_name"], "Computers in Human Behavior")
+
 
 if __name__ == "__main__":
     unittest.main()

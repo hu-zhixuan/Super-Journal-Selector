@@ -136,10 +136,15 @@ class OpenAlexFetcher:
 
             matched_candidates = [c for c in candidates if c[2]]
             if matched_candidates:
-                matched_candidates.sort(key=lambda x: x[1], reverse=True)
-                best_match = matched_candidates[0][0]
+                # 精确匹配优先：规范化后名称完全相等的源优先于子串匹配，
+                # 避免 "Computers in Human Behavior" 被同名子刊 "Reports" 等挤掉；多条精确命中再以活跃度排序
+                exact_candidates = [c for c in matched_candidates if clean_name(c[0]["display_name"]) == target_clean]
+                pool = exact_candidates if exact_candidates else matched_candidates
+                pool.sort(key=lambda x: x[1], reverse=True)
+                best_match = pool[0][0]
+                match_kind = "精确" if exact_candidates else "活跃"
                 logger.info(
-                    f"匹配到活跃期刊: '{best_match.get('display_name')}' (ID: {best_match.get('id')}), 近3年发文: {matched_candidates[0][1]} 篇"
+                    f"匹配到{match_kind}期刊: '{best_match.get('display_name')}' (ID: {best_match.get('id')}), 近3年发文: {pool[0][1]} 篇"
                 )
                 return best_match
 
