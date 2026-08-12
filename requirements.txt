@@ -9,4 +9,5 @@ pymupdf>=1.23.0
 sentence-transformers>=2.2.2
 # Optional: CN users may pre-download the embedding model via ModelScope (see README FAQ)
 # modelscope>=1.20.0
-
+matplotlib>=3.5.0
+# sentence-transformers 与 torch 用于语义对标（可选；离线演示/无 draft 模式不依赖）

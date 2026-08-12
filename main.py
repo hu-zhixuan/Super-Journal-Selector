@@ -289,6 +289,15 @@ def run_journal_profile_skill(
         except Exception as e_w_rep:
             logger.error(f"写入报告 Markdown 失败: {e_w_rep}")
 
+        # 可视化图表生成（可选依赖 matplotlib；失败不影响报告）
+        chart_paths: Dict[str, Optional[str]] = {}
+        try:
+            from plot_charts import generate_all_charts
+
+            chart_paths = generate_all_charts(aggregated_stats, out_dir=output_dir)
+        except Exception as e_chart:
+            logger.warning(f"可视化图表生成失败（忽略）: {e_chart}")
+
         return {
             "status": "success",
             "journal": journal,
@@ -301,6 +310,7 @@ def run_journal_profile_skill(
             "report_markdown": report_markdown,
             "output_directory": output_dir,
             "report_path": final_output_path,
+            "chart_paths": chart_paths,
         }
 
     except Exception as e:
@@ -353,6 +363,7 @@ def _run_offline_demo(
     # 输出目录与报告落盘（与正常模式一致的产物布局）
     safe_journal_filename = "".join(c if c.isalnum() else "_" for c in journal)
     final_output_path = output_path
+    chart_paths: Dict[str, Optional[str]] = {}
     if not final_output_path:
         output_dir = os.path.join("output", f"{safe_journal_filename}_offline_demo")
         os.makedirs(output_dir, exist_ok=True)
@@ -365,6 +376,14 @@ def _run_offline_demo(
     except Exception as e_w_rep:
         logger.error(f"写入离线演示报告失败: {e_w_rep}")
 
+    # 离线演示同样产出可视化图表（使用内置聚合统计）
+    try:
+        from plot_charts import generate_all_charts
+
+        chart_paths = generate_all_charts(aggregated_stats, out_dir=os.path.dirname(final_output_path) or "output")
+    except Exception as e_chart:
+        logger.warning(f"离线演示图表生成失败（忽略）: {e_chart}")
+
     return {
         "status": "success",
         "offline_demo": True,
@@ -374,6 +393,7 @@ def _run_offline_demo(
         "report_markdown": report_markdown,
         "output_directory": None,
         "report_path": final_output_path,
+        "chart_paths": chart_paths,
         "cost_statistics": {
             "total_api_calls": 0,
             "total_prompt_tokens": 0,
