@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
 from aggregate import ProfileAggregator
 from extract_features import FeatureExtractor
-from fetch_papers import OpenAlexFetcher, PaperRecord
+from fetch_papers import OpenAlexFetcher
 from generate_profile import ProfileGenerator
 from llm_client import LLMClient
 
@@ -326,7 +326,6 @@ def _run_offline_demo(
     使用离线样例目录 offline_demo/ 中预置的论文样本/画像报告完成全流程展示，
     保证无 API 密钥的评审环境也能秒级看到完整 4 层产品形态。
     """
-    import shutil as _shutil
 
     demo_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "offline_demo")
     sample_papers = os.path.join(demo_dir, "papers.json")
@@ -341,8 +340,9 @@ def _run_offline_demo(
             "message": f"离线演示数据缺失，请确认 {demo_dir} 目录完整。",
         }
 
+    # 离线样例论文记录（无需引入，仅用于占位校验样例文件存在性；已保留读取以证明样例完整）
     with open(sample_papers, "r", encoding="utf-8") as f:
-        papers = [PaperRecord(**p) for p in json.load(f)]
+        _ = json.load(f)  # 触发解析校验，样例文件缺失/损坏会在此时抛错
 
     aggregated_stats = {}
     try:

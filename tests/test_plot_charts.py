@@ -7,10 +7,6 @@ from plot_charts import (
     HAS_MPL,
     generate_all_charts,
     plot_method_distribution,
-    plot_open_science,
-    plot_reporting_styles,
-    plot_sample_size_dist,
-    plot_top_theories,
     plot_radar,
 )
 
