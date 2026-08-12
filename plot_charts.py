@@ -223,6 +223,6 @@ def generate_all_charts(
     paths["reporting_styles"] = plot_reporting_styles(aggregated_stats, os.path.join(out_dir, "reporting_styles.png"))
     if journals:
         paths["radar"] = plot_radar(journals, os.path.join(out_dir, "radar.png"))
-    generated = {k: v for k, v in paths.items() if v}
+    generated: Dict[str, Optional[str]] = {k: v for k, v in paths.items() if v}
     logger.info(f"可视化图表生成完成: {list(generated.keys())}")
     return generated
