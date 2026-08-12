@@ -203,10 +203,29 @@ def search_journals(query: str):
 def run_pipeline(journal_name: str, years: int, max_papers: int, user_draft: str, file_obj, progress=gr.Progress()):
     """
     网页端调用的生成函数。支持文件解析优先逻辑与实时进度条推流。
+    当 OFFLINE_DEMO=1 时进入离线演示模式（不访问网络/LLM），直接输出内置样例报告。
     """
     journal_name = journal_name.strip() if journal_name else ""
     if not journal_name:
         yield "❌ 错误：请先在上方输入期刊关键词并选择一个目标期刊！", ""
+        return
+
+    offline_demo = os.getenv("OFFLINE_DEMO", "0").lower() in {"1", "true", "yes", "on"}
+    if offline_demo:
+        progress(0.1, desc="[离线演示] 读取内置样例数据...")
+        yield "⏳ 离线演示模式已开启：不调用任何网络/LLM API，正在读取内置样例数据...", ""
+        yield "🛰️ 离线演示模式：以论文样例池生成画像报告（不消耗 API）...", ""
+        try:
+            from main import _run_offline_demo
+
+            result = _run_offline_demo(journal=journal_name)
+            progress(1.0, desc="[离线演示] 完成")
+            if result.get("status") == "success":
+                yield "🎉 [离线演示] 画像报告生成成功（已写入 output/，未消耗任何 API / 网络）", result["report_markdown"]
+            else:
+                yield f"❌ 离线演示失败: {result.get('message')}", ""
+        except Exception as e_demo:
+            yield f"❌ 离线演示异常: {e_demo}", ""
         return
 
     # 优先解析上传的文档文件

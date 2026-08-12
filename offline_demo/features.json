@@ -1,0 +1,184 @@
+[
+  {
+    "paper_id": "https://openalex.org/W4392024701",
+    "method_category": "Quantitative_Empirical",
+    "sample_description": "N=898 white-collar employees (survey data)",
+    "sample_size_approx": 898,
+    "theoretical_frameworks": [
+      "Job Demands-Resources Model"
+    ],
+    "analytical_tools": [
+      "PLS-SEM"
+    ],
+    "novelty_highlight": "Extends the Job Demands-Resources model to incorporate digital job demands and resources, empirically classifying the bright and dark sides of digitization using a large white-collar employee sample.",
+    "open_science_practices": [
+      "None"
+    ],
+    "statistical_reporting_style": "None",
+    "title": "The job demands-resources model as a theoretical lens for the bright and dark side of digitization",
+    "abstract": "With digitization continuing to reshape work environments, organizations must confront the challenges of comprehending its “bright side” and “dark side” effects. A growing imperative exists to comprehend how digitization affects employee well-being and to create sustainable health-centric workplaces. The established Job Demands-Resources model offers a pertinent theoretical framework for gaining fresh insights into alterations in job demands and resources caused by digitization. This study extends the Job Demands-Resources model to include digital job demands and resources by utilizing a sample of 898 white-collar employees. Partial Least Squares Structural Equation Modeling was employed to investigate digitization's interrelationships and dependencies within an organizational context. The results confirm that the Job Demands-Resources model offers a holistic approach to investigating the concrete effects of the “dark side\" and “bright side\" of digitization in a concrete work scenario and to classify them in a theoretically structured way. This study offers starting points for the future design of workplaces and strategies for organizations to harness the positive aspects of digitization while concurrently mitigating the psychological stress on employees.",
+    "cited_by_count": 105,
+    "publication_year": 2024,
+    "concepts": [
+      "Digitization",
+      "Great Rift",
+      "Lens (geology)",
+      "Through-the-lens metering",
+      "Psychology",
+      "Computer science"
+    ]
+  },
+  {
+    "paper_id": "https://openalex.org/W4392159125",
+    "method_category": "Theoretical_Review",
+    "sample_description": "无实证数据",
+    "sample_size_approx": -1,
+    "theoretical_frameworks": [
+      "Compensatory-Dissociative Online Gaming (C-DOG) model",
+      "Escapism",
+      "Self-Determination Theory"
+    ],
+    "analytical_tools": [
+      "None"
+    ],
+    "novelty_highlight": "首次提出补偿-解离在线游戏（C-DOG）模型，将适应性到病理性游戏过程与社交退缩（如蛰居）联系起来，为临床评估和治疗提供新框架。",
+    "open_science_practices": [
+      "None"
+    ],
+    "statistical_reporting_style": "None",
+    "title": "Problematic gaming, social withdrawal, and Escapism: The Compensatory-Dissociative Online Gaming (C-DOG) model",
+    "abstract": "In this article, we critically overview existing studies on compensatory and dissociative mechanisms associated with problematic gaming with a focus on escapism, and present a theoretical model integrating current research. In the first section, we link compensatory and dissociative processes related to gaming on a continuum that corresponds to the degree of connection/rupture between physical and virtual environments of the individual. In the second section, we discuss the strengths and limitations of existing conceptualizations and measures of escapism. We contend that escapism in gaming represents a key dimension of compensation for difficulties in psychological needs satisfaction in the physical environment, differently from escape (avoidance) and from general immersion in video games. In the last section, we elaborate the compensatory-dissociative online gaming (C-DOG) model, which defines a set of interconnected psychological processes operationalizing the continuum between adaptive and pathological online gaming: relaxation, body-mind detachment, active escapism, escape, and dissociation. This model provides an unprecedented way to consider meaningful processes for the clinical evaluation and treatment of problematic gaming, as well as the association of problematic gaming with emerging social withdrawal conditions, such as hikikomori).",
+    "cited_by_count": 56,
+    "publication_year": 2024,
+    "concepts": [
+      "Escapism",
+      "Dissociative",
+      "Operationalization",
+      "Psychology",
+      "Cognitive psychology",
+      "Social psychology"
+    ]
+  },
+  {
+    "paper_id": "https://openalex.org/W4399771211",
+    "method_category": "Theoretical_Review",
+    "sample_description": "无实证数据，系统文献综述",
+    "sample_size_approx": -1,
+    "theoretical_frameworks": [
+      "Privacy",
+      "Security",
+      "Trust"
+    ],
+    "analytical_tools": [
+      "Systematic Literature Review"
+    ],
+    "novelty_highlight": "首次系统梳理CAI中隐私、安全与信任感知的子构念重叠关系，并指出三者联合研究的稀缺性，为开发可靠量表提供方向",
+    "open_science_practices": [
+      "None"
+    ],
+    "statistical_reporting_style": "None",
+    "title": "Evaluating privacy, security, and trust perceptions in conversational AI: A systematic review",
+    "abstract": "Conversational AI (CAI) systems which encompass voice- and text-based assistants are on the rise and have been largely integrated into people’s everyday lives. Despite their widespread adoption, users voice concerns regarding privacy, security and trust in these systems. However, the composition of these perceptions, their impact on technology adoption and usage and the relationship between privacy, security and trust perceptions in the CAI context remain open research challenges. This study contributes to the field by conducting a Systematic Literature Review and offers insights into the current state of research on privacy, security and trust perceptions in the context of CAI systems. The review covers application fields and user groups and sheds light on empirical methods and tools used for assessment. Moreover, it provides insights into the reliability and validity of privacy, security and trust scales, as well as extensively investigating the subconstructs of each item as well as additional concepts which are concurrently collected. We point out that the perceptions of trust, privacy and security overlap based on the subconstructs we identified. While the majority of studies investigate one of these concepts, only a few studies were found exploring privacy, security and trust perceptions jointly. Our research aims to inform on directions to develop and use reliable scales for users’ privacy, security and trust perceptions and contribute to the development of trustworthy CAI systems.",
+    "cited_by_count": 89,
+    "publication_year": 2024,
+    "concepts": [
+      "Internet privacy",
+      "Perception",
+      "Psychology",
+      "Computer security",
+      "Computer science",
+      "Neuroscience"
+    ]
+  },
+  {
+    "paper_id": "https://openalex.org/W4399992361",
+    "method_category": "Quantitative_Empirical",
+    "sample_description": "未报告具体样本量；领域无关、激励性、交互式行为实验",
+    "sample_size_approx": -1,
+    "theoretical_frameworks": [
+      "Algorithm Appreciation",
+      "Trust in AI",
+      "Trust Calibration"
+    ],
+    "analytical_tools": [
+      "None"
+    ],
+    "novelty_highlight": "通过领域无关的激励性交互实验证明，仅告知建议由AI生成就会导致用户过度依赖，且这种过度依赖不仅损害自身效率，还会对第三方产生负面影响。",
+    "open_science_practices": [
+      "None"
+    ],
+    "statistical_reporting_style": "None",
+    "title": "Trust and reliance on AI — An experimental study on the extent and costs of overreliance on AI",
+    "abstract": "Decision-making is undergoing rapid changes due to the introduction of artificial intelligence (AI), as AI recommender systems can help mitigate human flaws and increase decision accuracy and efficiency. However, AI can also commit errors or suffer from algorithmic bias. Hence, blind trust in technologies carries risks, as users may follow detrimental advice resulting in undesired consequences. Building upon research on algorithm appreciation and trust in AI, the current study investigates whether users who receive AI advice in an uncertain situation overrely on this advice — to their own detriment and that of other parties. In a domain-independent, incentivized, and interactive behavioral experiment, we find that the mere knowledge of advice being generated by an AI causes people to overrely on it, that is, to follow AI advice even when it contradicts available contextual information as well as their own assessment. Frequently, this overreliance leads not only to inefficient outcomes for the advisee, but also to undesired effects regarding third parties. The results call into question how AI is being used in assisted decision making, emphasizing the importance of AI literacy and effective trust calibration for productive deployment of such systems.",
+    "cited_by_count": 333,
+    "publication_year": 2024,
+    "concepts": [
+      "Psychology",
+      "Social psychology",
+      "Epistemology",
+      "Positive economics",
+      "Sociology",
+      "Philosophy"
+    ]
+  },
+  {
+    "paper_id": "https://openalex.org/W4401485040",
+    "method_category": "Theoretical_Review",
+    "sample_description": "Systematic review of literature on digital transformation technologies in museum exhibitions; no empirical data",
+    "sample_size_approx": -1,
+    "theoretical_frameworks": [
+      "Digital Transformation Technologies",
+      "Museum Exhibition Management",
+      "Visitor Experience"
+    ],
+    "analytical_tools": [],
+    "novelty_highlight": "First systematic review explicitly linking digital transformation technologies to specific museum exhibition application scenarios, addressing the underexplored technology-application gap and providing integrated insights for practitioners and scholars.",
+    "open_science_practices": [
+      "None"
+    ],
+    "statistical_reporting_style": "None",
+    "title": "A systematic review of digital transformation technologies in museum exhibition",
+    "abstract": "Museum exhibitions, both temporary and permanent, form an essential link between a society and its cultural, historical, and artistic heritage sites. Curating artifacts and thematic displays in museum exhibitions can promote dialogue, foster cultural appreciation, and contribute to heritage preservation. The traditional way of holding museum exhibitions, heavily reliant on the expertise of designers and curatorial staff, makes them a labor-intensive process, from conceptualization to visitor engagement analysis. This review systematically compiles and examines how the application of digital transformation technologies (DTTs) has revolutionized museum exhibitions and augmented their future potential. DTTs such as artificial intelligence, immersive technologies, additive manufacturing, the Internet of Things, and cloud computing can help create engaging designs, improve accessibility and inclusivity, enhance educational potential, and allow for sophisticated visitor experience data collection and analyses, improving exhibit management. However, despite multiple specialized studies on DTTs and their roles in museum exhibitions, the connections between technology and application scenarios remain underexplored. By addressing this gap, this study is expected to inform and inspire practitioners in the museum and heritage sectors and present new research avenues for scholars.",
+    "cited_by_count": 109,
+    "publication_year": 2024,
+    "concepts": [
+      "Exhibition",
+      "Visitor pattern",
+      "Conceptualization",
+      "Digital transformation",
+      "Cultural heritage",
+      "Thematic analysis"
+    ]
+  },
+  {
+    "paper_id": "https://openalex.org/W4401121063",
+    "method_category": "Quantitative_Empirical",
+    "sample_description": "N=91 university students randomly assigned to use ChatGPT3.5 or Google for a socio-scientific inquiry task",
+    "sample_size_approx": 91,
+    "theoretical_frameworks": [
+      "Cognitive Load Theory",
+      "Scientific Inquiry",
+      "Argumentation"
+    ],
+    "analytical_tools": [
+      "Not specified"
+    ],
+    "novelty_highlight": "Randomized experiment comparing LLM versus traditional search engine use in scientific inquiry, showing that LLMs reduce cognitive load but also lower reasoning and argumentation quality.",
+    "open_science_practices": [
+      "None"
+    ],
+    "statistical_reporting_style": "Reported significance tests for between-group differences (p-values not detailed in abstract)",
+    "title": "Cognitive ease at a cost: LLMs reduce mental effort but compromise depth in student scientific inquiry",
+    "abstract": "This study explores the cognitive load and learning outcomes associated with using large language models (LLMs) versus traditional search engines for information gathering during learning. A total of 91 university students were randomly assigned to either use ChatGPT3.5 or Google to research the socio-scientific issue of nanoparticles in sunscreen to derive valid recommendations and justifications. The study aimed to investigate potential differences in cognitive load, as well as the quality and homogeneity of the students' recommendations and justifications. Results indicated that students using LLMs experienced significantly lower cognitive load. However, despite this reduction, these students demonstrated lower-quality reasoning and argumentation in their final recommendations compared to those who used traditional search engines. Further, the homogeneity of the recommendations and justifications did not differ significantly between the two groups, suggesting that LLMs did not restrict the diversity of students’ perspectives. These findings highlight the nuanced implications of digital tools on learning, suggesting that while LLMs can decrease the cognitive burden associated with information gathering during a learning task, they may not promote deeper engagement with content necessary for high-quality learning per se.",
+    "cited_by_count": 176,
+    "publication_year": 2024,
+    "concepts": [
+      "Argumentation theory",
+      "Cognitive load",
+      "Cognition",
+      "Psychology",
+      "Social psychology",
+      "Mathematics education"
+    ]
+  }
+]

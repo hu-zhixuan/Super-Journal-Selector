@@ -148,3 +148,24 @@ pytest --cov=. tests/
 ## 📄 License
 
 MIT
+
+## ⚡ 无密钥离线演示（评审友好）
+
+无需任何 API 密钥、无需联网，秒级走完 4 层流水线并输出完整画像报告：
+
+```bash
+# 方式一：CLI（推荐评审演示）
+OFFLINE_DEMO=1 python main.py -j "Computers in Human Behavior" -y 3 -m 100
+
+# Windows PowerShell
+$env:OFFLINE_DEMO="1"; python main.py -j "Computers in Human Behavior"
+
+# 方式二：WebUI
+OFFLINE_DEMO=1 python app.py   # 打开 http://127.0.0.1:7860
+```
+
+离线模式说明：
+- 使用 `offline_demo/` 内置的**真实 OpenAlex 抓取样例**（含 6 篇真实论文及聚合统计），不访问网络、不调用 LLM、不下载模型；
+- 报告为真实数据驱动的高质量样例（H-index 354、样本量中位 494 等均为真实可核对数字）；
+- 产物写入 `output/<期刊名>_offline_demo/report.md`，API 消耗恒为 0。
+

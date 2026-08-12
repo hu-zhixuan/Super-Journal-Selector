@@ -158,8 +158,10 @@ class LLMClient:
 
     def _init_session(self):
         self.session = requests.Session()
-        self.session.trust_env = False
-        self.session.proxies = {"http": None, "https": None}
+        # trust_env=True 会在存在系统代理时自动使用；若因本地代理异常导致连接失败，
+        # call() 内会捕获并重建为直连 Session（no_proxy 直连），两者互相兜底。
+        self.session.trust_env = True
+        self.session.proxies = {}
 
     def _build_headers(self, api_key: str) -> Dict[str, str]:
         """根据 API 格式构建请求头"""
@@ -232,8 +234,9 @@ class LLMClient:
         # 构建端点列表
         endpoints = []
         endpoints.append((self.url, self.api_key))
-        # 如果主端点是 fxb 服务，添加 DeepSeek 官方作为备用
-        if "fxb.supa.net.cn" in self.url:
+        # 如果主端点是 fxb 服务，添加 DeepSeek 官方作为备用。
+        # 注意：只有当 LLM_FALLBACK_ENDPOINT=false 时禁用备用端点（仅用于绕过不可用主端点调试）
+        if "fxb.supa.net.cn" in self.url and os.getenv("LLM_FALLBACK_ENDPOINT", "true").lower() != "false":
             fallback_key = self.fallback_api_key or self.api_key
             if self.api_format == "anthropic":
                 endpoints.append(("https://api.deepseek.com/v1/messages", fallback_key))
@@ -251,6 +254,15 @@ class LLMClient:
                     response = self.session.post(
                         target_url, headers=headers, json=payload, timeout=effective_timeout, verify=False
                     )
+                    # 主端点 HTTP 500 时视为临时故障：优先切换到备用端点，
+                    # 避免 5 次无效重试浪费大量时间（部分 one-api 长生成会短暂 500）
+                    if url_idx == 0 and response.status_code >= 500:
+                        logger.warning(
+                            f"主端点 {target_url} 返回 HTTP {response.status_code}（临时故障），"
+                            f"直接切换到备用端点重试..."
+                        )
+                        if url_idx < len(endpoints) - 1:
+                            break
                     response.raise_for_status()
 
                     resp_data = response.json()
@@ -286,9 +298,24 @@ class LLMClient:
                     is_rate_limit = False
                     wait_time = 0
 
-                    if "SSL" in str(e) or "Connection" in str(e) or "Timeout" in str(e):
-                        logger.warning(f"检测到 SSL/TCP 连接异常 ({str(e)})，正在自动重建 Session 刷新连接...")
+                    if (
+                        "SSL" in str(e)
+                        or "Connection" in str(e)
+                        or "Timeout" in str(e)
+                        or "ProxyError" in str(e)
+                        or "proxy" in str(e).lower()
+                        or "FileNotFoundError" in str(e)
+                    ):
+                        logger.warning(f"检测到连接/代理异常 ({str(e)})，正在自动重建 Session 重试...")
+                        # 代理异常时切换到"直连/不走系统代理"的 Session，与 DNS 补丁配合最多三重兜底
+                        if self.session.trust_env:
+                            self.session.trust_env = False
+                            self.session.proxies = {"http": None, "https": None}
+                        else:
+                            self.session.trust_env = True
+                            self.session.proxies = {}
                         self._init_session()
+                        continue
 
                     if hasattr(e, "response") and e.response is not None:
                         status_code = getattr(e.response, "status_code", None)

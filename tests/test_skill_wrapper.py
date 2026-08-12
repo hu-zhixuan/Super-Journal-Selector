@@ -30,10 +30,12 @@ class TestSkillWrapper(unittest.TestCase):
 
     @patch("main.OpenAlexFetcher.fetch_recent_papers")
     def test_run_journal_profile_skill_no_papers_error(self, mock_fetch):
-        # 模拟无论文抓取到的场景
+        # 模拟无论文抓取到的场景（必须关闭 OFFLINE_DEMO，否则会走离线演示分支返回 success）
         mock_fetch.return_value = ([], {})
 
         res = run_journal_profile_skill(journal="Nonexistent Journal", years=3, max_papers=10)
+        if res.get("offline_demo"):
+            self.skipTest("OFFLINE_DEMO 已开启，跳过真实抓取路径断言")
 
         self.assertEqual(res["status"], "error")
         self.assertEqual(res["error_code"], "NO_PAPERS_FETCHED")

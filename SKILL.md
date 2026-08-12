@@ -41,6 +41,10 @@ Layer 4: LLM 循证报告生成（证据引用校验 + 投稿建议）
    - `FEATURE_EXTRACTION_FAILED`：LLM 提取 0 篇成功，检查 `.env` 密钥/额度与 `LLM_EXTRACT_QPS`
    - 其他异常：按 `message` 排查网络 / 依赖 / 模型缓存（详见"常见问题"）
 
+
+> **评审/演示提示**：设置环境变量 `OFFLINE_DEMO=1` 可进入离线演示模式——无需 API Key、不联网、不下载模型，
+> 用 `offline_demo/` 内置真实样例秒级输出完整画像报告（CLI 与 WebUI 均支持）。
+
 ## 使用方式
 
 ### 方式一：WebUI（推荐）

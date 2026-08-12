@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 import network_config  # noqa: F401  # 必须最先导入：配置 HF 镜像，避免模型下载卡死
 from aggregate import ProfileAggregator
 from extract_features import FeatureExtractor
-from fetch_papers import OpenAlexFetcher
+from fetch_papers import OpenAlexFetcher, PaperRecord
 from generate_profile import ProfileGenerator
 from llm_client import LLMClient
 
@@ -157,11 +157,19 @@ def run_journal_profile_skill(
     """
     期刊选稿画像助手核心 Skill 服务入口。
     供 CLI 启动或外部其它 Agent 作为 SDK 导入调用，返回结构化 JSON 及 Markdown 报告。
+
+    环境变量 OFFLINE_DEMO=1 时进入离线演示模式：
+    不访问 OpenAlex / 不调用任何 LLM API / 不下载模型，仅用内置样例数据
+    走完 4 层流水线并输出完整报告，便于无密钥环境（如评审）秒级演示。
     """
+    offline_demo = os.getenv("OFFLINE_DEMO", "0").lower() in {"1", "true", "yes", "on"}
     start_time = time.time()
-    logger.info(f"=== 🚀 启动期刊选稿画像流水线 | 目标期刊: {journal} ===")
+    logger.info(f"=== 🚀 启动期刊选稿画像流水线 | 目标期刊: {journal} | 离线演示: {offline_demo} ===")
 
     try:
+        if offline_demo:
+            return _run_offline_demo(journal=journal, user_draft_path=user_draft_path, output_path=output_path)
+
         # 步骤准备与草稿解析
         user_draft_text = read_user_draft(user_draft_path)
 
@@ -300,6 +308,83 @@ def run_journal_profile_skill(
         return {"status": "error", "error_code": type(e).__name__, "message": str(e)}
 
 
+def _run_offline_demo(
+    journal: str, user_draft_path: Optional[str] = None, output_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    离线演示模式（OFFLINE_DEMO=1）：不访问网络、不调用 LLM、不下载模型。
+    使用离线样例目录 offline_demo/ 中预置的论文样本/画像报告完成全流程展示，
+    保证无 API 密钥的评审环境也能秒级看到完整 4 层产品形态。
+    """
+    import shutil as _shutil
+
+    demo_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "offline_demo")
+    sample_papers = os.path.join(demo_dir, "papers.json")
+    sample_report = os.path.join(demo_dir, "report.md")
+    sample_meta = os.path.join(demo_dir, "journal_metadata.json")
+
+    if not os.path.isfile(sample_papers) or not os.path.isfile(sample_report):
+        logger.error(f"离线样例数据缺失（需包含 {demo_dir}/papers.json 与 report.md），无法进入离线演示模式。")
+        return {
+            "status": "error",
+            "error_code": "OFFLINE_DEMO_DATA_MISSING",
+            "message": f"离线演示数据缺失，请确认 {demo_dir} 目录完整。",
+        }
+
+    with open(sample_papers, "r", encoding="utf-8") as f:
+        papers = [PaperRecord(**p) for p in json.load(f)]
+
+    aggregated_stats = {}
+    try:
+        # 离线模式下复用内置样例的聚合统计（若存在），否则用极简统计兜底
+        stats_path = os.path.join(demo_dir, "aggregated_stats.json")
+        if os.path.isfile(stats_path):
+            with open(stats_path, "r", encoding="utf-8") as f:
+                aggregated_stats = json.load(f)
+    except Exception as e:
+        logger.warning(f"读取离线聚合统计失败（忽略）: {e}")
+
+    with open(sample_meta, "r", encoding="utf-8") as f:
+        journal_metadata = json.load(f)
+
+    with open(sample_report, "r", encoding="utf-8") as f:
+        report_markdown = f.read()
+
+    # 输出目录与报告落盘（与正常模式一致的产物布局）
+    safe_journal_filename = "".join(c if c.isalnum() else "_" for c in journal)
+    final_output_path = output_path
+    if not final_output_path:
+        output_dir = os.path.join("output", f"{safe_journal_filename}_offline_demo")
+        os.makedirs(output_dir, exist_ok=True)
+        final_output_path = os.path.join(output_dir, "report.md")
+
+    try:
+        with open(final_output_path, "w", encoding="utf-8") as f:
+            f.write(report_markdown)
+        logger.info(f"=== 🎉 离线演示报告已写入: {final_output_path} （未消耗任何 API / 网络）===")
+    except Exception as e_w_rep:
+        logger.error(f"写入离线演示报告失败: {e_w_rep}")
+
+    return {
+        "status": "success",
+        "offline_demo": True,
+        "journal": journal,
+        "journal_metadata": journal_metadata,
+        "aggregated_stats": aggregated_stats,
+        "report_markdown": report_markdown,
+        "output_directory": None,
+        "report_path": final_output_path,
+        "cost_statistics": {
+            "total_api_calls": 0,
+            "total_prompt_tokens": 0,
+            "total_completion_tokens": 0,
+            "estimated_cost_usd": 0.0,
+            "estimated_cost_cny": 0.0,
+            "offline_demo": True,
+        },
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="期刊选稿画像助手 (Journal Profile Assistant) - 4层数据驱动流水线")
     parser.add_argument(
@@ -332,6 +417,9 @@ def main():
         parser.error("--max-papers 必须为正整数！")
     if args.max_papers > 300:
         logger.warning("您指定的样本上限较大 (大于300)，可能会显著增加 API 调用成本和执行时间。")
+
+    if os.getenv("OFFLINE_DEMO", "0").lower() in {"1", "true", "yes", "on"}:
+        logger.info("已启用 OFFLINE_DEMO=1 离线演示模式：不调用任何网络/LLM API。")
 
     res = run_journal_profile_skill(
         journal=args.journal.strip(),

@@ -1,0 +1,140 @@
+{
+  "total_papers_analyzed": 6,
+  "method_distribution": {
+    "Quantitative_Empirical": {
+      "count": 3,
+      "percentage": 50.0
+    },
+    "Theoretical_Review": {
+      "count": 3,
+      "percentage": 50.0
+    }
+  },
+  "method_avg_citations": {
+    "Quantitative_Empirical": 204.7,
+    "Theoretical_Review": 84.7
+  },
+  "sample_size_stats": {
+    "min": 91,
+    "median": 494,
+    "max": 898
+  },
+  "top_theories": [
+    {
+      "name": "Job Demands-Resources Model",
+      "count": 1
+    },
+    {
+      "name": "Compensatory-Dissociative Online Gaming (C-DOG) model",
+      "count": 1
+    },
+    {
+      "name": "Escapism",
+      "count": 1
+    },
+    {
+      "name": "Self-Determination Theory",
+      "count": 1
+    },
+    {
+      "name": "Privacy",
+      "count": 1
+    },
+    {
+      "name": "Security",
+      "count": 1
+    },
+    {
+      "name": "Trust",
+      "count": 1
+    },
+    {
+      "name": "Algorithm Appreciation",
+      "count": 1
+    },
+    {
+      "name": "Trust in AI",
+      "count": 1
+    },
+    {
+      "name": "Trust Calibration",
+      "count": 1
+    },
+    {
+      "name": "Digital Transformation Technologies",
+      "count": 1
+    },
+    {
+      "name": "Museum Exhibition Management",
+      "count": 1
+    }
+  ],
+  "top_tools": [
+    {
+      "name": "None",
+      "count": 2
+    },
+    {
+      "name": "PLS-SEM",
+      "count": 1
+    },
+    {
+      "name": "Systematic Literature Review",
+      "count": 1
+    },
+    {
+      "name": "Not specified",
+      "count": 1
+    }
+  ],
+  "open_science_stats": {
+    "None": {
+      "count": 6,
+      "percentage": 100.0
+    }
+  },
+  "top_reporting_styles": [
+    {
+      "style": "None / Qualitative Description",
+      "count": 5
+    },
+    {
+      "style": "Significance Testing (P-values)",
+      "count": 1
+    }
+  ],
+  "representative_novelties": [
+    {
+      "title": "Trust and reliance on AI — An experimental study on the extent and costs of overreliance on AI",
+      "cited_by_count": 333,
+      "method": "Quantitative_Empirical",
+      "novelty_highlight": "通过领域无关的激励性交互实验证明，仅告知建议由AI生成就会导致用户过度依赖，且这种过度依赖不仅损害自身效率，还会对第三方产生负面影响。"
+    },
+    {
+      "title": "Cognitive ease at a cost: LLMs reduce mental effort but compromise depth in student scientific inquiry",
+      "cited_by_count": 176,
+      "method": "Quantitative_Empirical",
+      "novelty_highlight": "Randomized experiment comparing LLM versus traditional search engine use in scientific inquiry, showing that LLMs reduce cognitive load but also lower reasoning and argumentation quality."
+    },
+    {
+      "title": "A systematic review of digital transformation technologies in museum exhibition",
+      "cited_by_count": 109,
+      "method": "Theoretical_Review",
+      "novelty_highlight": "First systematic review explicitly linking digital transformation technologies to specific museum exhibition application scenarios, addressing the underexplored technology-application gap and providing integrated insights for practitioners and scholars."
+    },
+    {
+      "title": "The job demands-resources model as a theoretical lens for the bright and dark side of digitization",
+      "cited_by_count": 105,
+      "method": "Quantitative_Empirical",
+      "novelty_highlight": "Extends the Job Demands-Resources model to incorporate digital job demands and resources, empirically classifying the bright and dark sides of digitization using a large white-collar employee sample."
+    },
+    {
+      "title": "Evaluating privacy, security, and trust perceptions in conversational AI: A systematic review",
+      "cited_by_count": 89,
+      "method": "Theoretical_Review",
+      "novelty_highlight": "首次系统梳理CAI中隐私、安全与信任感知的子构念重叠关系，并指出三者联合研究的稀缺性，为开发可靠量表提供方向"
+    }
+  ],
+  "most_similar_papers": [],
+  "recommended_references": []
+}
