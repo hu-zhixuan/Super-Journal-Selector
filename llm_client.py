@@ -205,10 +205,19 @@ class LLMClient:
             # OpenAI format
             choices = resp_data.get("choices", [])
             if choices:
+                message = choices[0].get("message", {})
+                # 兼容 reasoning 模型（如 deepseek-v4-flash）：content 可能被 reasoning 吃光为空。
+                # 此时回退读取 reasoning_content，保证调用方拿到可解析文本而不是“空响应”。
+                text = (message.get("content") or "").strip()
+                if not text:
+                    reasoning = message.get("reasoning_content") or ""
+                    if reasoning:
+                        logger.info("检测到 reasoning 模型 content 为空，回退读取 reasoning_content 输出。")
+                        text = reasoning.strip()
+                # 截断警告仍由调用方传入的 max_tokens 语义决定：仅当最终文本非空且确实被截断时提示
                 if choices[0].get("finish_reason") == "length":
                     logger.warning("LLM 输出达到 max_tokens 上限被截断，可能导致 JSON 不完整。")
-                message = choices[0].get("message", {})
-                return (message.get("content") or "").strip()
+                return text
             return ""
 
     def _parse_usage(self, resp_data: Dict[str, Any]) -> tuple:

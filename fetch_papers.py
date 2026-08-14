@@ -2,7 +2,9 @@ import hashlib
 import json
 import logging
 import os
+import random
 import re
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -10,6 +12,31 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
+
+# ============ 网络健壮性配置 ============
+try:
+    import urllib.request
+except ImportError:  # pragma: no cover
+    pass
+
+# 每次对 OpenAlex 请求前的串行礼貌延迟（秒），配合 mailto 进入 Polite Pool 规避 429 冷启动
+_OA_PER_REQUEST_DELAY = float(os.getenv("OA_REQUEST_DELAY", "2.5"))
+# OpenAlex 重试次数与初始退避基数（指数退避：2.5 -> 5 -> 10s ...）
+_OA_MAX_RETRIES = int(os.getenv("OA_MAX_RETRIES", "5"))
+# 串行延迟锁（进程级）
+_sleep_lock = random.Random()
+
+# arXiv API 兜底抓取（主源 OpenAlex 不可用时使用）
+_ARXIV_BASE = os.getenv("ARXIV_BASE", "http://export.arxiv.org/api/query")
+_ARXIV_TOPICS = [  # 与金融方法学语义强相关的固定主题
+    "cat:q-fin.TR", "cat:q-fin.ST",
+    "ti:machine learning AND abs:trading OR abs:stock OR abs:asset",
+    "ti:deep learning AND abs:portfolio OR abs:return OR abs:market",
+    "ti:reinforcement learning AND abs:trading OR abs:portfolio",
+    "ti:forecasting AND abs:stock OR abs:volatility OR abs:return",
+]
+# 若某次抓取启用了 arXiv 兜底，置 True 以跳过主源依赖的通道统计/热门扩容
+_arxiv_source_active = False
 
 
 @dataclass
@@ -100,6 +127,109 @@ class OpenAlexFetcher:
             self.email = "researcher@example.com"
         self.headers = {"User-Agent": f"JournalProfileSkill/1.0 (mailto:{self.email})"}
 
+    @staticmethod
+    def _polite_wait() -> None:
+        """进程级串行礼貌延迟：所有 OpenAlex 请求间至少间隔 OA_REQUEST_DELAY 秒，
+        显著降低 429 冷启动命中率（OpenAlex 官方建议 100ms-3s 礼貌间隔）。"""
+        time.sleep(_OA_PER_REQUEST_DELAY)
+
+    @staticmethod
+    def _oa_request(url: str, params: Dict[str, Any], timeout: int = 25) -> requests.Response:
+        """OpenAlex 请求统一出口：串行延迟 + 指数退避重试（附带 mailto 进入礼貌池）。"""
+        for attempt in range(_OA_MAX_RETRIES):
+            OpenAlexFetcher._polite_wait()
+            try:
+                resp = requests.get(
+                    url, params=params, headers=OpenAlexFetcher._current_headers(), proxies=_NO_SYSTEM_PROXY, timeout=timeout
+                )
+                if resp.status_code == 429:
+                    wait = _OA_PER_REQUEST_DELAY * (2 ** attempt)
+                    logger.warning(f"OpenAlex 429 限流 (第 {attempt+1}/{_OA_MAX_RETRIES} 次)，退避等待 {wait:.1f}s...")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                return resp
+            except requests.exceptions.HTTPError as e_http:
+                if e_http.response is not None and e_http.response.status_code == 429 and attempt < _OA_MAX_RETRIES - 1:
+                    wait = _OA_PER_REQUEST_DELAY * (2 ** attempt)
+                    logger.warning(f"OpenAlex 429 限流异常 (第 {attempt+1}/{_OA_MAX_RETRIES} 次)，退避等待 {wait:.1f}s...")
+                    time.sleep(wait)
+                    continue
+                raise
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e_net:
+                if attempt < _OA_MAX_RETRIES - 1:
+                    wait = _OA_PER_REQUEST_DELAY * (2 ** attempt)
+                    logger.warning(f"OpenAlex 网络异常 (第 {attempt+1}/{_OA_MAX_RETRIES} 次): {e_net}，等待 {wait:.1f}s 重试...")
+                    time.sleep(wait)
+                    continue
+                raise
+        # 理论不可达，防御性抛出
+        resp = requests.Response()
+        resp.status_code = 429
+        resp.url = url
+        raise requests.exceptions.HTTPError(f"OpenAlex 请求持续失败 ({url})", response=resp)
+
+    @staticmethod
+    def _current_headers() -> Dict[str, str]:
+        return {"User-Agent": "JournalProfileSkill/1.0 (mailto:researcher@example.com)"}
+
+    @classmethod
+    def _arxiv_fallback(cls, journal_name: str, years: int, max_papers: int, search_query: Optional[str] = None) -> List[PaperRecord]:
+        """主源 OpenAlex 不可用时，从 arXiv 高质量金融主题抓取带摘要论文作为兜底样本。
+
+        注意：arXiv 不是该期刊的精确题录，而是方法与主题相近的学术前沿样本。
+        返回的 PaperRecord.source_title 标注为 'arXiv (近似主题兜底)'，确保下游明白数据来源。
+        """
+        import xml.etree.ElementTree as ET
+
+        ns = {"a": "http://www.w3.org/2005/Atom"}
+        topics = _ARXIV_TOPICS
+        if search_query:
+            topics = [f"all:{search_query}"] + topics  # 用草稿关键词优先检索
+        seen: set = set()
+        papers: List[PaperRecord] = []
+        current_year = datetime.now().year
+        for topic in topics[:8]:
+            if len(papers) >= max_papers:
+                break
+            url = f"{_ARXIV_BASE}?search_query={urllib.parse.quote(topic)}&start=0&max_results=40&sortBy=submittedDate&sortOrder=descending"
+            try:
+                xml_text = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "JournalProfileSkill/1.0 (mailto:researcher@example.com)"}), timeout=40).read().decode("utf-8", "replace")
+                root = ET.fromstring(xml_text)
+                for e in root.findall("a:entry", ns):
+                    title = re.sub(r"\s+", " ", e.findtext("a:title", "", ns) or "").strip()
+                    summary = re.sub(r"\s+", " ", e.findtext("a:summary", "", ns) or "").strip()
+                    key = re.sub(r"[^a-z0-9]+", "", title.lower())
+                    if not title or key in seen or len(summary.split()) < 40:
+                        continue
+                    seen.add(key)
+                    # 用 id+title 构造唯一 ID，杜绝哈希冲突
+                    arx_id = ""
+                    for link_el in e.findall("a:link", ns):
+                        if link_el.get("title") == "abs":
+                            arx_id = (link_el.get("href") or "").split("/abs/")[-1]
+                            break
+                    unique_id = f"arxiv:{arx_id or title}"
+                    year = current_year
+                    try:
+                        year = int((e.findtext("a:published", "") or "")[:4]) or current_year
+                    except ValueError:
+                        pass
+                    papers.append(PaperRecord(
+                        id=unique_id, doi="", title=title, abstract=summary,
+                        publication_year=year, cited_by_count=0,
+                        source_title=f"arXiv {journal_name} (近似主题兜底)",
+                        concepts=["arXiv"],  # 语义占位
+                    ))
+                    if len(papers) >= max_papers:
+                        break
+                logger.info(f"arXiv 兜底检索 [{topic[:45]}]：累计 {len(papers)} 篇")
+            except Exception as e_arx:
+                logger.warning(f"arXiv 兜底检索失败 [{topic[:45]}]: {e_arx}")
+            time.sleep(2.0)  # arXiv 礼貌延迟
+        logger.info(f"arXiv 兜底总计获取 {len(papers)} 篇（来源标注为近似主题）")
+        return papers
+
     def resolve_journal_source(self, journal_name: str) -> Optional[Dict[str, Any]]:
         """
         匹配或检索 OpenAlex 中的 Journal Source ID。
@@ -107,8 +237,7 @@ class OpenAlexFetcher:
         url = f"{self.BASE_URL}/sources"
         params: Dict[str, Any] = {"search": journal_name, "per-page": 5}
         try:
-            resp = requests.get(url, params=params, proxies=_NO_SYSTEM_PROXY, timeout=15)
-            resp.raise_for_status()
+            resp = self._oa_request(url, params, timeout=15)
             data = resp.json()
             results = data.get("results", [])
             if not results:
@@ -224,11 +353,29 @@ class OpenAlexFetcher:
 
         # 2. 定位期刊元数据
         source_info = self.resolve_journal_source(journal_name)
-        if not source_info:
-            raise ValueError(f"无法定位期刊 Source: {journal_name}")
+        source_id, source_display_name = None, journal_name
+        if source_info:
+            source_id = source_info["id"]
+            source_display_name = source_info["display_name"]
+        else:
+            # 主源定位失败：降级为“按名称近似”画像，走 arXiv 兜底
+            logger.warning(f"无法定位期刊 Source '{journal_name}'（OpenAlex 可能限流），降级使用 arXiv 近似主题兜底样本。")
+            arxiv_papers = self._arxiv_fallback(journal_name, years, max_papers, search_query)
+            if not arxiv_papers:
+                raise ValueError(f"无法为期刊 '{journal_name}' 抓取到任何有效的带摘要论文样本（主源+arXiv 兜底均失败）")
+            pdf_cache_file = os.path.join("cache", f"papers_{journal_slug}_{years}_{max_papers}_{query_hash}.json")
+            try:
+                os.makedirs("cache", exist_ok=True)
+                with open(pdf_cache_file, "w", encoding="utf-8") as fc:
+                    json.dump({"papers": [p.to_dict() for p in arxiv_papers],
+                               "journal_metadata": {"display_name": journal_name,
+                                                     "source": "arXiv 近似主题兜底",
+                                                     "caveat": "非该期刊确切题录，仅方法与主题相近"}},
+                              fc, ensure_ascii=False, indent=2)
+            except Exception as e_cache2:
+                logger.warning(f"写入 arXiv 兜底缓存失败: {e_cache2}")
+            return arxiv_papers[:max_papers], {"display_name": journal_name, "source": "arXiv 近似主题兜底"}
 
-        source_id = source_info["id"]
-        source_display_name = source_info["display_name"]
         summary_stats = source_info.get("summary_stats", {})
         x_concepts = source_info.get("x_concepts", [])
 
@@ -309,14 +456,7 @@ class OpenAlexFetcher:
                 "per-page": min(target_a * 2, 200),
             }
             try:
-                resp = requests.get(
-                    url,
-                    params=params,
-                    headers=self.headers,
-                    proxies=_NO_SYSTEM_PROXY,
-                    timeout=25,
-                )
-                resp.raise_for_status()
+                resp = self._oa_request(url, params, timeout=25)
                 results = resp.json().get("results", [])
                 for item in results:
                     paper = self._build_paper_from_openalex(item, source_display_name, current_year)
@@ -340,14 +480,7 @@ class OpenAlexFetcher:
                 "per-page": min(target_b * 2, 100),
             }
             try:
-                resp = requests.get(
-                    url,
-                    params=params,
-                    headers=self.headers,
-                    proxies=_NO_SYSTEM_PROXY,
-                    timeout=25,
-                )
-                resp.raise_for_status()
+                resp = self._oa_request(url, params, timeout=25)
                 results = resp.json().get("results", [])
                 for item in results:
                     paper = self._build_paper_from_openalex(item, source_display_name, current_year)
@@ -366,14 +499,7 @@ class OpenAlexFetcher:
                 if "search" in params:
                     del params["search"]
                 try:
-                    resp = requests.get(
-                        url,
-                        params=params,
-                        headers=self.headers,
-                        proxies=_NO_SYSTEM_PROXY,
-                        timeout=25,
-                    )
-                    resp.raise_for_status()
+                    resp = self._oa_request(url, params, timeout=25)
                     results = resp.json().get("results", [])
                     b2_count = 0
                     for item in results:
@@ -440,50 +566,72 @@ class OpenAlexFetcher:
         combined_papers = papers_channel_a + papers_channel_b
         deduped_papers = deduplicate_papers(combined_papers)
 
+        # 主源全部失败（OpenAlex 限流/网络故障）时，降级到 arXiv 近似主题兜底
+        if not deduped_papers:
+            logger.warning("OpenAlex 主源没有返回任何有效论文，降级使用 arXiv 近似主题兜底样本...")
+            try:
+                arxiv_papers = self._arxiv_fallback(journal_name, years, max_papers, search_query)
+            except Exception as e_arx2:
+                logger.error(f"arXiv 兜底也失败: {e_arx2}")
+                arxiv_papers = []
+            if arxiv_papers:
+                deduped_papers = arxiv_papers[:max_papers]
+                journal_metadata = {
+                    "display_name": source_display_name,
+                    "source": "arXiv 近似主题兜底",
+                    "caveat": "非该期刊确切题录，仅方法与主题相近（OpenAlex 主源不可用）",
+                }
+                logger.info(f"arXiv 兜底提供 {len(deduped_papers)} 篇论文用于画像（来源标注为近似主题）。")
+        if not deduped_papers:
+            raise ValueError(f"无法为期刊 '{source_display_name}' 抓取到任何有效的带摘要论文样本")
+        # 若确有主源结果，仍按原逻辑合并统计通道贡献；否则直达兜底缓存写盘
+        if not (papers_channel_a or papers_channel_b) or (len(deduped_papers) >= max_papers and not arxiv_papers):
+            pass  # 走下方统一提交逻辑
+
         # 统计去重后各通道各自的有效供给数 (通过 ID 追溯)
         channel_b_ids = {p.id for p in papers_channel_b if p.id}
         deduped_b = [p for p in deduped_papers if p.id in channel_b_ids]
         deduped_a = [p for p in deduped_papers if p.id not in channel_b_ids]
-
         logger.info(f"物理去重后：有效通用样本 {len(deduped_a)} 篇，有效相关主题样本 {len(deduped_b)} 篇。")
 
-        # 检查通道 B 实际贡献是否达标，如果不达标或总数不足，使用通道 A 的剩余热门文章进行垫底补齐
-        total_valid = len(deduped_papers)
-        if total_valid < max_papers and len(deduped_a) < (max_papers - len(deduped_b)):
-            # 如果去重后总量依然不够，且有检索接口完全失灵的情况，尝试降级做纯热门召回填补空缺
-            logger.warning(
-                f"文献样本库总数 ({total_valid} 篇) 仍未达到计划的 {max_papers} 篇。触发全热门召回扩容填补..."
-            )
-            # 拉大分页抓取热门
-            url = f"{self.BASE_URL}/works"
-            filter_str = f"primary_location.source.id:{source_id},publication_year:>{min_year},has_abstract:true"
-            params = {
-                "filter": filter_str,
-                "sort": "cited_by_count:desc",
-                "per-page": 200,
-            }
-            try:
-                resp = requests.get(
-                    url,
-                    params=params,
-                    headers=self.headers,
-                    proxies=_NO_SYSTEM_PROXY,
-                    timeout=25,
+        # 若当前样本全部来自 arXiv 兜底，跳过通道统计与热门扩容（它们依赖主源 source_id）
+        if _arxiv_source_active or all(
+            (p.source_title or "").startswith("arXiv") for p in deduped_papers
+        ):
+            final_papers = deduped_papers[:max_papers]
+            logger.info(f"使用 arXiv 兜底样本 {len(final_papers)} 篇（来源标注为近似主题）。")
+        else:
+            # 检查通道 B 实际贡献是否达标，如果不达标或总数不足，使用通道 A 的剩余热门文章进行垫底补齐
+            total_valid = len(deduped_papers)
+            if total_valid < max_papers and len(deduped_a) < (max_papers - len(deduped_b)):
+                # 如果去重后总量依然不够，且有检索接口完全失灵的情况，尝试降级做纯热门召回填补空缺
+                logger.warning(
+                    f"文献样本库总数 ({total_valid} 篇) 仍未达到计划的 {max_papers} 篇。触发全热门召回扩容填补..."
                 )
-                if resp.status_code == 200:
-                    results = resp.json().get("results", [])
-                    for item in results:
-                        paper = self._build_paper_from_openalex(item, source_display_name, current_year)
-                        if not paper:
-                            continue
-                        deduped_papers.append(paper)
-                    deduped_papers = deduplicate_papers(deduped_papers)
-            except Exception as e_pad:
-                logger.warning(f"热门垫底补齐抓取异常: {e_pad}")
+                # 拉大分页抓取热门
+                url = f"{self.BASE_URL}/works"
+                filter_str = f"primary_location.source.id:{source_id},publication_year:>{min_year},has_abstract:true"
+                params = {
+                    "filter": filter_str,
+                    "sort": "cited_by_count:desc",
+                    "per-page": 200,
+                }
+                try:
+                    resp = self._oa_request(url, params, timeout=25)
+                    if resp.status_code == 200:
+                        results = resp.json().get("results", [])
+                        for item in results:
+                            paper = self._build_paper_from_openalex(item, source_display_name, current_year)
+                            if not paper:
+                                continue
+                            deduped_papers.append(paper)
+                        deduped_papers = deduplicate_papers(deduped_papers)
+                except Exception as e_pad:
+                    logger.warning(f"热门垫底补齐抓取异常: {e_pad}")
 
-        # 截断限制
-        final_papers = deduped_papers[:max_papers]
-        logger.info(f"最终输出去重对齐后的精选大样本库共: {len(final_papers)} 篇。")
+            # 截断限制
+            final_papers = deduped_papers[:max_papers]
+            logger.info(f"最终输出去重对齐后的精选大样本库共: {len(final_papers)} 篇。")
 
         if not final_papers:
             raise ValueError(f"无法为期刊 '{source_display_name}' 抓取到任何有效的带摘要论文样本")
