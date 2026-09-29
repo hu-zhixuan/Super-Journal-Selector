@@ -32,8 +32,8 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/QD8-png/Super-Journal-Selector"
-Issues = "https://github.com/QD8-png/Super-Journal-Selector/issues"
+Repository = "https://github.com/hu-zhixuan/Super-Journal-Selector"
+Issues = "https://github.com/hu-zhixuan/Super-Journal-Selector/issues"
 
 [project.scripts]
 journal-profile = "main:main"
