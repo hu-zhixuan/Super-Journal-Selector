@@ -6,7 +6,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "AI4SS Team"}
+    {name = "hu-zhixuan", email = "huzhixuan8@gmail.com"}
 ]
 keywords = ["academic", "journal", "profiling", "LLM", "OpenAlex", "bibliometrics"]
 
@@ -32,8 +32,8 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/QD8-png/Super-Journal-Selector"
-Issues = "https://github.com/QD8-png/Super-Journal-Selector/issues"
+Repository = "https://github.com/hu-zhixuan/Super-Journal-Selector"
+Issues = "https://github.com/hu-zhixuan/Super-Journal-Selector/issues"
 
 [project.scripts]
 journal-profile = "main:main"
